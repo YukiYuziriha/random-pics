@@ -21,9 +21,11 @@ class MainWindow(QMainWindow):
 
         self.folder_button = QPushButton("switch folder...", self)
 
-        # TODO: fot button in buttons??? 
-        # do something about it, ask codex
-        # layout.addWidget(button)
+        layout.addWidget(self.prev_button)
+        layout.addWidget(self.next_button)
+        layout.addWidget(self.pause_button)
+        layout.addWidget(self.play_button)
+        layout.addWidget(self.folder_button)
         
         center.setLayout(layout)
         self.setCentralWidget(center)
