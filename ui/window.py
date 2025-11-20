@@ -13,8 +13,7 @@ class MainWindow(QMainWindow):
         
         self.prev_button = QPushButton("previous", self)
         self.next_button = QPushButton("next", self)
-        self.pause_button = QPushButton("pause!", self)
-        self.play_button = QPushButton("play!", self)
+        self.switch_button = QPushButton("placeholder!", self)
 
         # TODO: ui shows play or pause button depending on timer state
         # or better logic here
@@ -23,8 +22,7 @@ class MainWindow(QMainWindow):
 
         layout.addWidget(self.prev_button)
         layout.addWidget(self.next_button)
-        layout.addWidget(self.pause_button)
-        layout.addWidget(self.play_button)
+        layout.addWidget(self.switch_button)
         layout.addWidget(self.folder_button)
         
         center.setLayout(layout)
