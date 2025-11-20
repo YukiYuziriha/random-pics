@@ -25,7 +25,6 @@ def test_prev_logic(playlist_abc):
     assert playlist_abc.prev() == "b"
     assert playlist_abc.prev() == "a" 
 
-    
 def test_single_item_stays_same():
     playlist_a = Playlist(["a"])
 
