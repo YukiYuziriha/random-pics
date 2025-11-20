@@ -1,4 +1,4 @@
-from PySide6.QtWidgets import QMainWindow, QWidget, QVBoxLayout, QLabel, QPushButton
+from PySide6.QtWidgets import QLabel, QMainWindow, QPushButton, QVBoxLayout, QWidget
 
 
 class MainWindow(QMainWindow):
@@ -8,9 +8,9 @@ class MainWindow(QMainWindow):
         center = QWidget(self)
         layout = QVBoxLayout(center)
 
-        self.path_label = QLabel("send nudes!", self) # why self here
+        self.path_label = QLabel("send nudes!", self)  # why self here
         layout.addWidget(self.path_label)
-        
+
         self.prev_button = QPushButton("previous", self)
         self.next_button = QPushButton("next", self)
         self.switch_button = QPushButton("play!", self)
@@ -20,7 +20,7 @@ class MainWindow(QMainWindow):
         layout.addWidget(self.next_button)
         layout.addWidget(self.switch_button)
         layout.addWidget(self.folder_button)
-        
+
         self.prev_button.clicked.connect(self._on_prev)
         self.next_button.clicked.connect(self._on_next)
         self.switch_button.clicked.connect(self._on_switch)
@@ -29,16 +29,14 @@ class MainWindow(QMainWindow):
         center.setLayout(layout)
         self.setCentralWidget(center)
 
-    def _on_prev(self):
+    def _on_prev(self) -> None:
         print("prev??")
 
-    def _on_next(self):
+    def _on_next(self) -> None:
         print("next??")
 
-    def _on_switch(self):
+    def _on_switch(self) -> None:
         print("switch??")
 
-    def _on_folder(self):
+    def _on_folder(self) -> None:
         print("folder??")
-
-    
