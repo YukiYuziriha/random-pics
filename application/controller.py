@@ -1,9 +1,10 @@
-from domain.playlist import Playlist 
+from domain.playlist import Playlist
 
-class AppController():
+
+class AppController:
     def __init__(self) -> None:
         self.playlist = Playlist([])
-    
+
     def on_folder_selected(self, paths: list[str]) -> str | None:
         self.playlist = Playlist(paths)
 
@@ -17,4 +18,3 @@ class AppController():
 
     def on_prev(self) -> str | None:
         return self.playlist.prev()
-
