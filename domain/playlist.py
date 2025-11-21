@@ -5,6 +5,7 @@ from dataclasses import dataclass
 
 @dataclass
 class Playlist:
+    """Playlist class logic for switching between files"""
     items: list[str]
     index: int = 0
 
