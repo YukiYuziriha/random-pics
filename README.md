@@ -1,24 +1,74 @@
 # Random Pics
 
-A desktop application for managing and displaying local image collections with automatic slideshow functionality.
+Gesture Drawing clone - Tauri + WebGPU + TypeScript
 
-## Features
+## Setup
 
-- Fast folder switching with instant image display
-- SQLite database for image metadata storage
-- Thumbnail caching for quick previews
-- Customizable display timers
-- Responsive Qt-based UI
+### Prerequisites
 
-## Architecture
+**Rust** (backend):
+```bash
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+source ~/.cargo/env
+```
 
-See `local/architecture_improved.md` for detailed architecture documentation.
+**Node.js** (v20+ recommended):
+```bash
+# Using nvm
+nvm install 20
+nvm use 20
+```
 
-## Development
+**System dependencies** (Linux):
+```bash
+sudo apt update
+sudo apt install libwebkit2gtk-4.1-dev \
+  build-essential \
+  curl \
+  wget \
+  file \
+  libxdo-dev \
+  libssl-dev \
+  libayatana-appindicator3-dev \
+  librsvg2-dev
+```
 
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-python random_pics/app.py## License
+### Install
+
+```bash
+npm install
+```
+
+### Run dev
+
+```bash
+npm run tauri dev
+```
+
+### Build
+
+```bash
+npm run tauri build
+```
+
+## Project Structure
+
+```
+src-tauri/src/
+├── domain/      # Core business logic (playlist, timer, effects, session)
+├── app/         # Application service layer
+├── adapters/    # I/O adapters (database, scanner, GPU, clock)
+└── commands/    # Tauri commands (exposed to frontend)
+
+src/
+├── components/  # React components
+├── hooks/       # Custom React hooks
+├── state/       # Global state management
+└── lib/         # Utilities
+```
+
+See [PLAN.md](./PLAN.md) for detailed architecture.
+
+## License
 
 MIT License
