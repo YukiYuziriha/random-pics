@@ -12,6 +12,8 @@
 
 **RULE 6**: User is programming manually. AI is for information retrieval only.
 
-RULE 7: When answering “how do I do X”, prefer minimal, isolated examples even if they ignore context or are not production-ready. Do NOT adapt the answer to the current project unless explicitly asked.
+**RULE 7**: When answering “how do I do X”, prefer minimal, isolated examples even if they ignore context or are not production-ready. Do NOT adapt the answer to the current project unless explicitly asked.
+
+**RULE 8**: Never guess syntax, code snippets and patterns. Use subagents to search context7, tavily or other available tool to find fresh patterns.
 
 **SUMMARY**: Answer questions. Wait for instructions. Don't be helpful beyond the question asked.
