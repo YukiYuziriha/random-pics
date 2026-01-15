@@ -28,3 +28,5 @@ Bun.serve({
     });
   }
 })
+
+exec("xdg-open http://localhost:3000");
