@@ -18,4 +18,13 @@ const randomImagePath = `${dirPath}/${randomImage}`;
 const randomImageLoaded = await Bun.file(randomImagePath).arrayBuffer();
 console.log(`loaded ${randomImagePath} (${(randomImageLoaded.byteLength/1024/1024).toFixed(2)} Mbytes)`);
 
-exec(`xdg-open "${randomImagePath}"`);
+//exec(`xdg-open "${randomImagePath}"`);
+
+Bun.serve({
+  port: 3000,
+  fetch() {
+    return new Response(randomImageLoaded, {
+      headers: { "Content-Type": "image/jpeg" }
+    });
+  }
+})
