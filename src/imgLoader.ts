@@ -1,19 +1,21 @@
 import { readdir } from "node:fs/promises";
 import { join } from "node:path";
+import { exec } from "node:child_process";
 
 const dirPath = "/mnt/ssd/refs/800 Rebel Girl Fighter/Spear";
 
 const files = await readdir(dirPath);
-const images = [];
+const imagesAvailable = files.filter(file => /\.(jpg|jpeg|png|gif|webp)$/i.test(file));
 
-for (const file of files) {
-  if (/\.(jpg|jpeg|png|webp|gif)$/i.test(file)) {
-    
-    console.log(`image ${file}`); //just list images
-    
-    const pathToImage = `${dirPath}/${file}`;
-    const buffer = await Bun.file(pathToImage).arrayBuffer();
-    images.push(Buffer.from(buffer));
-  }
+if (imagesAvailable.length === 0) {
+  console.log("no bitches");
+  throw new Error("no images available");
 }
 
+const randomImage = imagesAvailable[Math.floor(Math.random() * imagesAvailable.length)];
+const randomImagePath = `${dirPath}/${randomImage}`;
+
+const randomImageLoaded = await Bun.file(randomImagePath).arrayBuffer();
+console.log(`loaded ${randomImagePath} (${(randomImageLoaded.byteLength/1024/1024).toFixed(2)} Mbytes)`);
+
+exec(`xdg-open "${randomImagePath}"`);
