@@ -1,11 +1,19 @@
 import { readdir } from "node:fs/promises";
-import { join } from "node:path";
+import { Glob } from "bun";
 import { exec } from "node:child_process";
 
-const dirPath = "/mnt/ssd/refs/800 Rebel Girl Fighter/Spear";
+const glob = new Glob("**/*.{jpeg,jpg,png,gif,webp}");
+const imagesAvailable: string[] = [];
 
-const files = await readdir(dirPath);
-const imagesAvailable = files.filter(file => /\.(jpg|jpeg|png|gif|webp)$/i.test(file));
+const dirPath = "/mnt/ssd/refs/800 Rebel Girl Fighter"
+
+for await (const file of glob.scan({
+  cwd: dirPath,
+  onlyFiles: true,
+  absolute: true,
+})) {
+  imagesAvailable.push(file);
+}
 
 if (imagesAvailable.length === 0) {
   console.log("no bitches");
@@ -13,7 +21,7 @@ if (imagesAvailable.length === 0) {
 }
 
 const randomImage = imagesAvailable[Math.floor(Math.random() * imagesAvailable.length)];
-const randomImagePath = `${dirPath}/${randomImage}`;
+const randomImagePath = randomImage;
 
 const randomImageLoaded = await Bun.file(randomImagePath).arrayBuffer();
 console.log(`loaded ${randomImagePath} (${(randomImageLoaded.byteLength/1024/1024).toFixed(2)} Mbytes)`);
