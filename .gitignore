@@ -7,4 +7,6 @@ bun.lockb
 *.log
 .DS_Store
 *.tsbuildinfo
-
+*.js
+*.d.ts
+*.map
