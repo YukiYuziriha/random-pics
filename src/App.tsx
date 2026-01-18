@@ -9,5 +9,14 @@ function MyButton() {
 }
 
 export default function App() {
-  return <MyButton />
+  return (
+    <div style={{
+      display: 'flex',
+      justifyContent: 'center',
+      alignItems: 'center',
+      height: '100vh',
+    }}>
+      <MyButton />
+    </div>
+  )
 }
