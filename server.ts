@@ -1,7 +1,9 @@
 import index from "./index.html";
 
+const PORT: number = 3000
+
 Bun.serve({
-  port: 3000,
+  port: PORT,
   routes: {
     "/": index,
   },
@@ -10,4 +12,4 @@ Bun.serve({
   }
 });
 
-console.log("server is running at port 3000")
+console.log(`server is running at port ${PORT}`)
