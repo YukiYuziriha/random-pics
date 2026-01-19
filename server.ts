@@ -1,4 +1,3 @@
-import index from "./index.html";
 import { getRandomImage } from "./src/imgLoader.ts";
 
 const PORT: number = 3000
