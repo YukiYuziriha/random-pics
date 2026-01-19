@@ -16,7 +16,17 @@ export default function App() {
       alignItems: 'center',
       height: '100vh',
     }}>
-      <MyButton />
+      <div style={{
+        width: '500px',
+        height: '80vh',
+        border: '5px solid #ccc',
+        borderRadius: '15px',
+        display: 'flex',
+        justifyContent: 'center',
+        alignItems: 'center',
+      }}>
+        <MyButton />
+      </div>
     </div>
   )
 }
