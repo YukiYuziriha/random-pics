@@ -1,6 +1,6 @@
 ## how to run shit in dev mode: 
 ```
-bun run path_to_file
+bun run server.ts
 ```
 
 ```
