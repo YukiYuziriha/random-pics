@@ -26,22 +26,27 @@ export default function App() {
       alignItems: 'center',
       gap: '10px',
       height: '100vh',
+      background: '#0f111a',
     }}>
-      {imageSrc && <img
-        src={imageSrc}
-        style={{ maxWidth: '100%', maxHeight: '90%' }}
-        alt="loaded image"
-      />}
 
       <div style={{
-        width: '500px',
+        width: '80vw',
         height: '80vh',
-        border: '5px solid #ccc',
+        border: '5px solid #615532',
+        gap: '10px',
+        background: '#21294a',
+        flexDirection: 'column',
         borderRadius: '15px',
         display: 'flex',
         justifyContent: 'center',
         alignItems: 'center',
+        overflow: 'hidden',
       }}>
+      {imageSrc && <img
+        src={imageSrc}
+        style={{ maxWidth: '100%', maxHeight: '90%', objectFit: 'contain' }}
+        alt="loaded image"
+      />}
         <MyButton onLoadImage={handleLoadImage} />
       </div>
     </div>
