@@ -1,6 +1,6 @@
 import { useState } from 'react'
 
-function MyButton({ onLoadImage }: { onLoadImage: () => void }) {
+function LoadButton({ onLoadImage }: { onLoadImage: () => void }) {
   return (
     <button onClick={onLoadImage}>
       load img
@@ -47,7 +47,7 @@ export default function App() {
         style={{ maxWidth: '100%', maxHeight: '90%', objectFit: 'contain' }}
         alt="loaded image"
       />}
-        <MyButton onLoadImage={handleLoadImage} />
+        <LoadButton onLoadImage={handleLoadImage} />
       </div>
     </div>
   )
