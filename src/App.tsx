@@ -3,7 +3,15 @@ import { useState } from 'react'
 function ForwardButton({ onLoadImage }: { onLoadImage: () => void }) {
   return (
     <button onClick={onLoadImage}>
-      load img
+      next img
+    </button>
+  )
+}
+
+function BackButton({ onLoadImage }: { onLoadImage: () => void }) {
+  return (
+    <button onClick={onLoadImage}>
+      prev img
     </button>
   )
 }
