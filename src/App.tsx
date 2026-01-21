@@ -1,6 +1,16 @@
-import { useState } from 'react'
+import { useState } from 'react';
+import { RANDOM_ENDPOINT, NEXT_ENDPOINT, PREV_ENDPOINT } from "./constants/endpoints.ts";
 
-function ForwardButton({ onLoadImage }: { onLoadImage: () => void }) {
+
+function RandomButton({ onLoadImage }: { onLoadImage: () => void }) {
+  return (
+    <button onClick={onLoadImage}>
+      random
+    </button>
+  )
+}
+
+function NextButton({ onLoadImage }: { onLoadImage: () => void }) {
   return (
     <button onClick={onLoadImage}>
       next img
@@ -8,7 +18,7 @@ function ForwardButton({ onLoadImage }: { onLoadImage: () => void }) {
   )
 }
 
-function BackButton({ onLoadImage }: { onLoadImage: () => void }) {
+function PrevButton({ onLoadImage }: { onLoadImage: () => void }) {
   return (
     <button onClick={onLoadImage}>
       prev img
@@ -19,8 +29,8 @@ function BackButton({ onLoadImage }: { onLoadImage: () => void }) {
 export default function App() {
   const [imageSrc, setImageSrc] = useState('')
 
-  const handleLoadImage = async () => {
-    const res = await fetch('/api/random')
+  const handleLoadImage = async (endpoint: string) => {
+    const res = await fetch(`/api/${endpoint}`)
     const blob = await res.blob()
     const url = URL.createObjectURL(blob)
     setImageSrc(url)
@@ -55,7 +65,9 @@ export default function App() {
         style={{ maxWidth: '100%', maxHeight: '90%', objectFit: 'contain' }}
         alt="loaded image"
       />}
-        <ForwardButton onLoadImage={handleLoadImage} />
+        <PrevButton onLoadImage={() => handleLoadImage(PREV_ENDPOINT)} />
+        <RandomButton onLoadImage={() => handleLoadImage(RANDOM_ENDPOINT)} />
+        <NextButton onLoadImage={() => handleLoadImage(NEXT_ENDPOINT)} />
       </div>
     </div>
   )

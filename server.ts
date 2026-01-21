@@ -1,4 +1,5 @@
-import { getRandomImage } from "./src/imgLoader.ts";
+import { getRandomImage, getNextImage, getPrevImage } from "./src/imgLoader.ts";
+import { RANDOM_ENDPOINT, NEXT_ENDPOINT, PREV_ENDPOINT } from "./src/constants/endpoints.ts";
 
 const PORT: number = 3000
 const indexHtml = await Bun.file("./index.html").text();
@@ -11,8 +12,22 @@ Bun.serve({
     const url = new URL(req.url);
     const path = url.pathname;
 
-    if (req.url.endsWith('/api/random')) {
+    if (req.url.endsWith(`/api/${RANDOM_ENDPOINT}`)) {
       const imageBuffer = await getRandomImage();
+      return new Response(imageBuffer, {
+        headers: { "Content-Type": "image/jpeg" }
+      });
+    }
+
+    if (req.url.endsWith(`/api/${NEXT_ENDPOINT}`)) {
+      const imageBuffer = await getNextImage();
+      return new Response(imageBuffer, {
+        headers: { "Content-Type": "image/jpeg" }
+      });
+    }
+
+    if (req.url.endsWith(`/api/${PREV_ENDPOINT}`)) {
+      const imageBuffer = await getPrevImage();
       return new Response(imageBuffer, {
         headers: { "Content-Type": "image/jpeg" }
       });
