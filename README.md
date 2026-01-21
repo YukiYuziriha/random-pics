@@ -1,6 +1,6 @@
 ## how to run shit in dev mode: 
 ```
-bun run server.ts
+bun run --watch server.ts
 ```
 
 ```
