@@ -49,7 +49,7 @@ export async function getNextRandomImage(): Promise<ArrayBuffer> {
     return loadAtIndex(visitedRandomIndexes[currentRandomIndex]!);
   }
 
-  return getForceRandomImage();
+  return getForceRandomImage(true);
 }
 
 export async function getPrevRandomImage(): Promise<ArrayBuffer> {
@@ -61,6 +61,11 @@ export async function getPrevRandomImage(): Promise<ArrayBuffer> {
 
   if (currentRandomIndex > 0) {
     currentRandomIndex -= 1;
+    return loadAtIndex(visitedRandomIndexes[currentRandomIndex]!);
+  }
+  
+  if (currentRandomIndex === 0) {
+    return getForceRandomImage(false);
   }
 
   return loadAtIndex(visitedRandomIndexes[currentRandomIndex]!);
@@ -80,9 +85,12 @@ export async function getForceRandomImage(forcePointerToLast: boolean = true): P
   }
 
   visitedRandomIndexesCurrentLap.add(nextIndex);
-  visitedRandomIndexes.push(nextIndex);
   if (forcePointerToLast) {
+    visitedRandomIndexes.push(nextIndex);
     currentRandomIndex = visitedRandomIndexes.length - 1;
+  } else {
+    visitedRandomIndexes.unshift(nextIndex);
+    currentRandomIndex = 0;
   }
   return loadAtIndex(nextIndex); 
 }
