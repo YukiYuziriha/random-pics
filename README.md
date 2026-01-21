@@ -15,4 +15,4 @@ will be highly optimized, never choking on filesystem, freezing etc.
 
 ## current state
 can randomly serve pictures. 
-no timer yet, no player interactions.
+no timer yet, can load next/prev image in random/normal order. history of random preserves during session.
