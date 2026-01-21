@@ -2,6 +2,8 @@ import { Glob } from "bun";
 
 const paths: string[] = [];
 const visitedRandomIndexes: number[] = [];
+const visitedRandomIndexesCurrentLap = new Set<number>();
+let currentRandomIndex: number = 0;
 let currentIndex: number = 0;
 let initialized: boolean = false;
 
@@ -35,19 +37,54 @@ async function loadAtIndex(index: number): Promise<ArrayBuffer> {
   return data;
 }
 
-export async function getRandomImage(): Promise<ArrayBuffer> {
+export async function getNextRandomImage(): Promise<ArrayBuffer> {
   await initializePathsToImages();
-  if (visitedRandomIndexes.length >= paths.length) {
-    console.log("new lap")
-    visitedRandomIndexes.length = 0;
-  }
-  currentIndex = Math.floor(Math.random() * paths.length);
 
-  while (visitedRandomIndexes.includes(currentIndex)) {
-    currentIndex = Math.floor(Math.random() * paths.length);
+  if (visitedRandomIndexes.length === 0) {
+    return getForceRandomImage();
   }
-  visitedRandomIndexes.push(currentIndex);
-  return loadAtIndex(currentIndex);
+
+  if (currentRandomIndex < visitedRandomIndexes.length - 1) {
+    currentRandomIndex += 1;
+    return loadAtIndex(visitedRandomIndexes[currentRandomIndex]!);
+  }
+
+  return getForceRandomImage();
+}
+
+export async function getPrevRandomImage(): Promise<ArrayBuffer> {
+  await initializePathsToImages();
+  
+  if (visitedRandomIndexes.length === 0) {
+    return getForceRandomImage();
+  }
+
+  if (currentRandomIndex > 0) {
+    currentRandomIndex -= 1;
+  }
+
+  return loadAtIndex(visitedRandomIndexes[currentRandomIndex]!);
+}
+
+export async function getForceRandomImage(forcePointerToLast: boolean = true): Promise<ArrayBuffer> {
+  await initializePathsToImages();
+
+  if (visitedRandomIndexesCurrentLap.size >= paths.length) {
+    console.log("new lap")
+    visitedRandomIndexesCurrentLap.clear();
+  }
+
+  let nextIndex = Math.floor(Math.random() * paths.length);
+  while (visitedRandomIndexesCurrentLap.has(nextIndex)) {
+    nextIndex = Math.floor(Math.random() * paths.length);
+  }
+
+  visitedRandomIndexesCurrentLap.add(nextIndex);
+  visitedRandomIndexes.push(nextIndex);
+  if (forcePointerToLast) {
+    currentRandomIndex = visitedRandomIndexes.length - 1;
+  }
+  return loadAtIndex(nextIndex); 
 }
 
 export async function getNextImage(): Promise<ArrayBuffer> {
