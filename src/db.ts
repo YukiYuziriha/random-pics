@@ -1,6 +1,7 @@
 import { Database } from "bun:sqlite";
 
-const db = new Database("./data/imgstate.sqlite", { create: true, readwrite: true });
+const dbPath = Bun.resolveSync("../data/imgstate.sqlite", import.meta.dir);
+export const db = new Database(dbPath, { create: true, readwrite: true });
 
 db.run(`
   CREATE TABLE IF NOT EXISTS folders (

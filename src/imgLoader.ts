@@ -1,16 +1,80 @@
 import { Glob } from "bun";
-
-const paths: string[] = [];
-const visitedRandomIndexes: number[] = [];
-const visitedRandomIndexesCurrentLap = new Set<number>();
-let currentRandomIndex: number = 0;
-let currentIndex: number = 0;
-let initialized: boolean = false;
+import { db } from "./db.ts";
 
 const dirPath = "/mnt/ssd/refs/800 Rebel Girl Fighter"
 
-async function initializePathsToImages(): Promise<void> {
-  if (initialized) return;
+const insertFolder = db.query(`
+                              INSERT OR IGNORE INTO folders (path, added_at)
+                              VALUES ($path, $addedAt)
+                              `);
+const getFolder = db.query(`
+                           SELECT id FROM folders WHERE path = ?
+                           `);
+const countImages = db.query(`
+                             SELECT COUNT(*) AS count
+                             FROM images
+                             WHERE folder_id = ?
+                             `);
+const insertImage = db.query(`
+                             INSERT OR IGNORE INTO IMAGES (path, folder_id)
+                             VALUES ($path, $folderId)
+                             `);
+const listImageIds = db.query(`
+                              SELECT id FROM images
+                              WHERE folder_id = ?
+                              ORDER BY id
+                              `);
+const getImagePath = db.query(`
+                              SELECT path FROM images WHERE id = ?
+                              `);
+const getState = db.query(`
+                          SELECT current_index, current_random_index
+                          FROM state WHERE id = 1
+                          `);
+const setCurrentIndex = db.query(`
+                                 UPDATE state
+                                 SET current_index = $currentIndex
+                                 WHERE id = 1
+                                 `);
+const setCurrentRandomIndex = db.query(`
+                                        UPDATE state
+                                        SET current_random_index = $currentRandomIndex
+                                        WHERE ID = 1
+                                       `)
+const historyCount = db.query(`
+                              SELECT COUNT(*) AS count
+                              FROM random_history
+                              `);
+const historyMaxIndex = db.query(`
+                                 SELECT COALESCE(MAX(order_index), -1) AS max_index
+                                 FROM random_history
+                                 `);
+const historyAt = db.query(`
+                           SELECT image_id FROM random_history WHERE order_index = ?
+                           `);
+const historyInsert = db.query(`
+                                INSERT INTO random_history (order_index, image_id)
+                                VALUES ($orderIndex, $imageId)
+                                `);
+
+function historyShiftUpSafe(): void {
+  db.run("BEGIN");
+  db.run("UPDATE random_history SET order_index = order_index + 1000000000");
+  db.run("UPDATE random_history SET order_index = order_index - 999999999");
+  db.run("COMMIT");
+}
+
+async function ensureImagesIndexed(): Promise<number> {
+  insertFolder.run({ $path: dirPath, $addedAt: new Date().toISOString() });
+  const folder = getFolder.get(dirPath) as { id: number } | null;
+  if (!folder) {
+    throw new Error("no folder???");
+  }
+
+  const countRow = countImages.get(folder.id) as {count: number };
+  if (countRow.count > 0) {
+    return folder.id;
+  }
 
   const glob = new Glob("**/*.{jpeg,jpg,png,gif,webp}");
 
@@ -19,90 +83,135 @@ async function initializePathsToImages(): Promise<void> {
     onlyFiles: true,
     absolute: true,
   })) {
-    paths.push(file);
+    insertImage.run({ $path: file, $folderId: folder.id });
   }
 
-  if (paths.length === 0) {
+  const afterRow = countImages.get(folder.id) as { count: number };
+  if (afterRow.count === 0) {
     console.log("no bitches");
     throw new Error("no images available");
   }
 
-  initialized = true;
+  return folder.id;
 }
 
-async function loadAtIndex(index: number): Promise<ArrayBuffer> {
-  const filePath = paths[index]!;
-  const data = await Bun.file(filePath).arrayBuffer();
-  console.log(`loaded ${filePath} (${(data.byteLength/1024/1024).toFixed(2)} Mbytes)`);
+function getImageIds(folderId: number): number[] {
+  const rows = listImageIds.all(folderId) as { id: number }[];
+  return rows.map((r) => r.id);
+}
+
+async function loadByImageId(imageId: number): Promise<ArrayBuffer> {
+  const row = getImagePath.get(imageId) as { path: string } | null;
+  if (!row) {
+    throw new Error("image id not found");
+  }
+  const data = await Bun.file(row.path).arrayBuffer();
+  console.log(`loaded ${row.path} (${(data.byteLength/1024/1024).toFixed(2)} Mbytes)`);
   return data;
 }
 
 export async function getNextRandomImage(): Promise<ArrayBuffer> {
-  await initializePathsToImages();
+  await ensureImagesIndexed();
 
-  if (visitedRandomIndexes.length === 0) {
-    return getForceRandomImage();
+  const countRow = historyCount.get() as { count: number };
+  if (countRow.count === 0) {
+    return getForceRandomImage(true);
   }
 
-  if (currentRandomIndex < visitedRandomIndexes.length - 1) {
-    currentRandomIndex += 1;
-    return loadAtIndex(visitedRandomIndexes[currentRandomIndex]!);
+  const state = getState.get() as { current_index: number; current_random_index: number };
+  if (state.current_random_index < countRow.count - 1) {
+    const nextIndex = state.current_random_index + 1;
+    const row = historyAt.get(nextIndex) as { image_id: number } | null;
+    if (!row) {
+      return getForceRandomImage(true);
+    }
+    setCurrentRandomIndex.run({ $currentRandomIndex: nextIndex });
+    return loadByImageId(row.image_id);
   }
 
   return getForceRandomImage(true);
 }
 
 export async function getPrevRandomImage(): Promise<ArrayBuffer> {
-  await initializePathsToImages();
+  await ensureImagesIndexed();
   
-  if (visitedRandomIndexes.length === 0) {
-    return getForceRandomImage();
+  const countRow = historyCount.get() as { count: number };
+  if (countRow.count === 0) {
+    return getForceRandomImage(true);
   }
 
-  if (currentRandomIndex > 0) {
-    currentRandomIndex -= 1;
-    return loadAtIndex(visitedRandomIndexes[currentRandomIndex]!);
+  const state = getState.get() as { current_index: number; current_random_index: number };
+  if (state.current_random_index > 0) {
+    const prevIndex = state.current_random_index - 1;
+    const row = historyAt.get(prevIndex) as { image_id: number } | null;
+    if (!row) {
+      return getForceRandomImage(true);
+    }
+    setCurrentRandomIndex.run({ $currentRandomIndex: prevIndex });
+    return loadByImageId(row.image_id);
   }
   
-  if (currentRandomIndex === 0) {
+  if (state.current_random_index === 0) {
     return getForceRandomImage(false);
   }
 
-  return loadAtIndex(visitedRandomIndexes[currentRandomIndex]!);
+  const row = historyAt.get(state.current_random_index) as { image_id: number } | null;
+  if (!row) {
+    return getForceRandomImage(true);
+  }
+  return loadByImageId(row.image_id);
 }
 
 export async function getForceRandomImage(forcePointerToLast: boolean = true): Promise<ArrayBuffer> {
-  await initializePathsToImages();
-
-  if (visitedRandomIndexesCurrentLap.size >= paths.length) {
-    console.log("new lap")
-    visitedRandomIndexesCurrentLap.clear();
+  const folderId = await ensureImagesIndexed();
+  const imageIds = getImageIds(folderId);
+  if (imageIds.length === 0) {
+    throw new Error("no images available");
   }
-
-  let nextIndex = Math.floor(Math.random() * paths.length);
-  while (visitedRandomIndexesCurrentLap.has(nextIndex)) {
-    nextIndex = Math.floor(Math.random() * paths.length);
+  const lapCount = db.query(`SELECT COUNT(*) AS count FROM random_lap`);
+  const lapHas = db.query(`SELECT 1 FROM random_lap WHERE image_id = ? LIMIT 1`);
+  const lapInsert = db.query(`INSERT OR IGNORE INTO random_lap (image_id) VALUES ($imageId)`);
+  const lapClear = db.query(`DELETE FROM random_lap`);
+  const lapRow = lapCount.get() as { count: number };
+  if (lapRow.count >= imageIds.length) {
+    lapClear.run();
   }
-
-  visitedRandomIndexesCurrentLap.add(nextIndex);
+  let imageId = imageIds[Math.floor(Math.random() * imageIds.length)]!;
+  while (lapHas.get(imageId)) {
+    imageId = imageIds[Math.floor(Math.random() * imageIds.length)]!;
+  }
+  lapInsert.run({ $imageId: imageId });
   if (forcePointerToLast) {
-    visitedRandomIndexes.push(nextIndex);
-    currentRandomIndex = visitedRandomIndexes.length - 1;
+    const maxRow = historyMaxIndex.get() as { max_index: number };
+    const nextIndex = maxRow.max_index + 1;
+    historyInsert.run({ $orderIndex: nextIndex, $imageId: imageId });
+    setCurrentRandomIndex.run({ $currentRandomIndex: nextIndex });
   } else {
-    visitedRandomIndexes.unshift(nextIndex);
-    currentRandomIndex = 0;
+    historyShiftUpSafe();
+    historyInsert.run({ $orderIndex: 0, $imageId: imageId });
+    setCurrentRandomIndex.run({ $currentRandomIndex: 0 });
   }
-  return loadAtIndex(nextIndex); 
+  return loadByImageId(imageId);
 }
-
 export async function getNextImage(): Promise<ArrayBuffer> {
-  await initializePathsToImages();
-  currentIndex = (currentIndex + 1) % paths.length;
-  return loadAtIndex(currentIndex);
+  const folderId = await ensureImagesIndexed();
+  const imageIds = getImageIds(folderId);
+  if (imageIds.length === 0) {
+    throw new Error("no images available");
+  }
+  const state = getState.get() as { current_index: number; current_random_index: number };
+  const nextIndex = (state.current_index + 1) % imageIds.length;
+  setCurrentIndex.run({ $currentIndex: nextIndex });
+  return loadByImageId(imageIds[nextIndex]!);
 }
-
 export async function getPrevImage(): Promise<ArrayBuffer> {
-  await initializePathsToImages();
-  currentIndex = (currentIndex - 1 + paths.length) % paths.length;
-  return loadAtIndex(currentIndex);
+  const folderId = await ensureImagesIndexed();
+  const imageIds = getImageIds(folderId);
+  if (imageIds.length === 0) {
+    throw new Error("no images available");
+  }
+  const state = getState.get() as { current_index: number; current_random_index: number };
+  const prevIndex = (state.current_index - 1 + imageIds.length) % imageIds.length;
+  setCurrentIndex.run({ $currentIndex: prevIndex });
+  return loadByImageId(imageIds[prevIndex]!);
 }
