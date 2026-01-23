@@ -56,6 +56,15 @@ const historyInsert = db.query(`
                                 INSERT INTO random_history (order_index, image_id)
                                 VALUES ($orderIndex, $imageId)
                                 `);
+const getRandomHistory = db.query(`
+                                  SELECT rh.order_index, i.path
+                                  FROM random_history rh
+                                  JOIN images i ON i.id = rh.image_id
+                                  ORDER BY rh.order_index
+                                  `);
+const getCurrentPointer = db.query(`
+                                   SELECT current_random_index FROM state WHERE id = 1
+                                   `);
 
 function historyShiftUpSafe(): void {
   db.run("BEGIN");
@@ -214,4 +223,10 @@ export async function getPrevImage(): Promise<ArrayBuffer> {
   const prevIndex = (state.current_index - 1 + imageIds.length) % imageIds.length;
   setCurrentIndex.run({ $currentIndex: prevIndex });
   return loadByImageId(imageIds[prevIndex]!);
+}
+
+export function getRandomHistoryAndPointer(): { history: string[]; currentIndex: number } {
+  const rows = getRandomHistory.all() as { path: string }[];
+  const pointer = getCurrentPointer.get() as { current_random_index: number };
+  return { history: rows.map(r => r.path), currentIndex: pointer.current_random_index };
 }

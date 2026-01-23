@@ -1,5 +1,5 @@
-import { getNextRandomImage, getNextImage, getPrevImage, getPrevRandomImage, getForceRandomImage } from "./src/imgLoader.ts";
-import { NEXT_RANDOM_ENDPOINT, PREV_RANDOM_ENDPOINT, FORCE_RANDOM_ENDPOINT, NEXT_ENDPOINT, PREV_ENDPOINT } from "./src/constants/endpoints.ts";
+import { getNextRandomImage, getNextImage, getPrevImage, getPrevRandomImage, getForceRandomImage, getRandomHistoryAndPointer } from "./src/imgLoader.ts";
+import { NEXT_RANDOM_ENDPOINT, PREV_RANDOM_ENDPOINT, FORCE_RANDOM_ENDPOINT, NEXT_ENDPOINT, PREV_ENDPOINT, RANDOM_HISTORY_ENDPOINT } from "./src/constants/endpoints.ts";
 
 const PORT: number = 3000
 const indexHtml = await Bun.file("./index.html").text();
@@ -44,6 +44,13 @@ Bun.serve({
       const imageBuffer = await getPrevImage();
       return new Response(imageBuffer, {
         headers: { "Content-Type": "image/jpeg" }
+      });
+    }
+
+    if (req.url.endsWith(`/api/${RANDOM_HISTORY_ENDPOINT}`)) {
+      const history = getRandomHistoryAndPointer();
+      return new Response(JSON.stringify(history), {
+        headers: { "Content-Type": "application/json" },
       });
     }
 
