@@ -5,7 +5,7 @@ import { NEXT_RANDOM_ENDPOINT, PREV_RANDOM_ENDPOINT, FORCE_RANDOM_ENDPOINT, NEXT
 function ForceRandomButton({ onLoadImage }: { onLoadImage: () => void }) {
   return (
     <button onClick={onLoadImage}>
-      random
+      new-random
     </button>
   )
 }
@@ -13,7 +13,7 @@ function ForceRandomButton({ onLoadImage }: { onLoadImage: () => void }) {
 function NextButton({ onLoadImage }: { onLoadImage: () => void }) {
   return (
     <button onClick={onLoadImage}>
-      next img
+      next
     </button>
   )
 }
@@ -21,7 +21,7 @@ function NextButton({ onLoadImage }: { onLoadImage: () => void }) {
 function PrevButton({ onLoadImage }: { onLoadImage: () => void }) {
   return (
     <button onClick={onLoadImage}>
-      prev img
+      prev
     </button>
   )
 }
@@ -29,7 +29,7 @@ function PrevButton({ onLoadImage }: { onLoadImage: () => void }) {
 function NextRandomButton({ onLoadImage }: { onLoadImage: () => void }) {
   return (
     <button onClick={onLoadImage}>
-      next random img
+      next-random
     </button>
   )
 }
@@ -37,7 +37,7 @@ function NextRandomButton({ onLoadImage }: { onLoadImage: () => void }) {
 function PrevRandomButton({ onLoadImage }: { onLoadImage: () => void }) {
   return (
     <button onClick={onLoadImage}>
-      prev random img
+      prev-random
     </button>
   )
 }
@@ -135,16 +135,16 @@ export default function App() {
         >
           <PrevButton onLoadImage={() => handleLoadImage(PREV_ENDPOINT)} />
           <NextButton onLoadImage={() => handleLoadImage(NEXT_ENDPOINT)} />
-          <NextRandomButton onLoadImage={ async () => { 
-            await handleLoadImage(NEXT_RANDOM_ENDPOINT);
+          <PrevRandomButton onLoadImage={ async () => {
+            await handleLoadImage(PREV_RANDOM_ENDPOINT)
             await loadHistory();
-          }} />
-          <ForceRandomButton onLoadImage={ async () => { 
+          }} />          <ForceRandomButton onLoadImage={ async () => { 
             await handleLoadImage(FORCE_RANDOM_ENDPOINT);
             await loadHistory();
           }} />
-          <PrevRandomButton onLoadImage={ async () => {
-            await handleLoadImage(PREV_RANDOM_ENDPOINT)
+
+          <NextRandomButton onLoadImage={ async () => { 
+            await handleLoadImage(NEXT_RANDOM_ENDPOINT);
             await loadHistory();
           }} />
         </div>
