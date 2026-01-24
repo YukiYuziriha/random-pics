@@ -83,7 +83,6 @@ export default function App() {
         flexDirection: 'row',
         display: 'flex',
         justifyContent: 'space-between',
-        alignItems: 'center',
         overflow: 'hidden',
       }}
     >
@@ -91,6 +90,7 @@ export default function App() {
       data-testid="folder-history-panel"
       style={{
         width: '20vw',
+        flexShrink: 0,
       }}
     >
 
@@ -105,15 +105,26 @@ export default function App() {
         alignItems: 'center',
       }}
     >
-      {imageSrc && <img
-        src={imageSrc}
-        style={{ 
-          maxWidth: '100%', 
-          maxHeight: '90%', 
-          objectFit: 'contain' 
+      <div 
+        data-testid="image-container"
+        style={{
+          flex: 1,
+          display: 'flex',
+          justifyContent: 'center',
+          overflow: 'hidden',
+          alignItems: 'center',
         }}
-        alt="loaded image"
-      />}
+      >
+        {imageSrc && <img
+          src={imageSrc}
+          style={{ 
+            maxWidth: '100%', 
+            maxHeight: '100%', 
+            objectFit: 'contain',
+          }}
+          alt="loaded image"
+        />}
+      </div>
       <div 
         data-testid="buttons-row"
         style={{
@@ -146,6 +157,7 @@ export default function App() {
         height: '80vh',
         display: 'flex',
         flexDirection: 'column',
+        flexShrink: 0,
         justifyContent: 'center',
         alignItems: 'stretch',
         overflow: 'hidden',
