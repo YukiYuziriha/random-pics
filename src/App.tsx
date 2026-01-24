@@ -73,128 +73,117 @@ export default function App() {
   });
 
   return (
-    <div style={{
-      display: 'flex',
-      flexDirection: 'column',
-      justifyContent: 'center',
-      alignItems: 'center',
-      gap: '10px',
-      height: '100vh',
-      background: '#0f111a',
-    }}>
+    <div 
+      data-testid="app-panel" 
+      style={{
+        height: '100vh',
+        border: '3px solid #615532',
+        gap: '10px',
+        background: '#21294a',
+        flexDirection: 'row',
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        overflow: 'hidden',
+      }}
+    >
+    <div
+      data-testid="folder-history-panel"
+      style={{
+        width: '20vw',
+      }}
+    >
 
+    </div>
+    <div
+      data-testid="image-and-buttons"
+      style={{
+        display: 'flex',
+        height: '100vh',
+        flexDirection: 'column',
+        justifyContent: 'center',
+        alignItems: 'center',
+      }}
+    >
+      {imageSrc && <img
+        src={imageSrc}
+        style={{ 
+          maxWidth: '100%', 
+          maxHeight: '90%', 
+          objectFit: 'contain' 
+        }}
+        alt="loaded image"
+      />}
       <div 
-        data-testid="app-panel" 
+        data-testid="buttons-row"
         style={{
-          width: '80vw',
-          height: '80vh',
-          border: '3px solid #615532',
-          gap: '10px',
-          background: '#21294a',
           flexDirection: 'row',
           display: 'flex',
-          justifyContent: 'center',
-          alignItems: 'center',
-          overflow: 'hidden',
-        }}
-      >
-      <div
-        data-testid="folder-history-panel"
-        style={{
-          width: '20vw',
-        }}
-      >
-
-      </div>
-      <div
-        data-testid="image-and-buttons"
-        style={{
-          display: 'flex',
-          height: '80vh',
-          flexDirection: 'column',
-          justifyContent: 'center',
+          marginTop: 'auto',
           alignItems: 'center',
         }}
       >
-        {imageSrc && <img
-          src={imageSrc}
-          style={{ 
-            maxWidth: '100%', 
-            maxHeight: '90%', 
-            objectFit: 'contain' 
-          }}
-          alt="loaded image"
-        />}
-        <div 
-          data-testid="buttons-row"
-          style={{
-            flexDirection: 'row',
-            display: 'flex',
-            alignItems: 'center',
-          }}
-        >
-          <PrevButton onLoadImage={() => handleLoadImage(PREV_ENDPOINT)} />
-          <NextButton onLoadImage={() => handleLoadImage(NEXT_ENDPOINT)} />
-          <PrevRandomButton onLoadImage={ async () => {
-            await handleLoadImage(PREV_RANDOM_ENDPOINT)
-            await loadHistory();
-          }} />          <ForceRandomButton onLoadImage={ async () => { 
-            await handleLoadImage(FORCE_RANDOM_ENDPOINT);
-            await loadHistory();
-          }} />
+        <PrevButton onLoadImage={() => handleLoadImage(PREV_ENDPOINT)} />
+        <NextButton onLoadImage={() => handleLoadImage(NEXT_ENDPOINT)} />
+        <PrevRandomButton onLoadImage={ async () => {
+          await handleLoadImage(PREV_RANDOM_ENDPOINT)
+          await loadHistory();
+        }} />          <ForceRandomButton onLoadImage={ async () => { 
+          await handleLoadImage(FORCE_RANDOM_ENDPOINT);
+          await loadHistory();
+        }} />
 
-          <NextRandomButton onLoadImage={ async () => { 
-            await handleLoadImage(NEXT_RANDOM_ENDPOINT);
-            await loadHistory();
-          }} />
-        </div>
+        <NextRandomButton onLoadImage={ async () => { 
+          await handleLoadImage(NEXT_RANDOM_ENDPOINT);
+          await loadHistory();
+        }} />
       </div>
+    </div>
+    <div
+      data-testid="random-history-panel"
+      style={{
+        width: '20vw',
+        height: '80vh',
+        display: 'flex',
+        flexDirection: 'column',
+        justifyContent: 'center',
+        alignItems: 'stretch',
+        overflow: 'hidden',
+      }}
+    >
       <div
-        data-testid="random-history-panel"
+        data-testid="list-container"
         style={{
-          width: '20vw',
-          height: '80vh',
           display: 'flex',
           flexDirection: 'column',
-          justifyContent: 'center',
-          alignItems: 'stretch',
-          overflow: 'hidden',
+          gap: '4px',
+          overflowY: 'auto',
         }}
       >
-        <div
-          data-testid="list-container"
-          style={{
-            display: 'flex',
-            flexDirection: 'column',
-            gap: '4px',
-            overflowY: 'auto',
-          }}
-        >
-          {windowItems.map((item, i) => {
-            const isCurrent = i === half;
-            return (
-              <div
-                data-testid="list-item"
-                key={`${i}-${item ?? "empty"}`}
-                style={{
-                  height: "24px",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  color: item ? (isCurrent ? "#fff" : "#a0a0a0") : "transparent",
-                  background: isCurrent ? "#3b2f1f" : "transparent",
-                  fontWeight: isCurrent ? 700 : 400,
-                  fontFamily: "monospace",
-                  borderRadius: "4px",
-                }}
-              >
-                {item ? item.split("/").pop() : "placeholder"}
-              </div>
-            );
-          })}
-        </div>
+        {windowItems.map((item, i) => {
+          const isCurrent = i === half;
+          return (
+            <div
+              data-testid="list-item"
+              key={`${i}-${item ?? "empty"}`}
+              style={{
+                height: "24px",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                color: item ? (isCurrent ? "#fff" : "#a0a0a0") : "transparent",
+                background: isCurrent ? "#3b2f1f" : "transparent",
+                fontWeight: isCurrent ? 700 : 400,
+                fontFamily: "monospace",
+                borderRadius: "4px",
+              }}
+            >
+              {item ? item.split("/").pop() : "placeholder"}
+            </div>
+          );
+        })}
       </div>
-      </div>
+    </div>
     </div>
   )
 }
