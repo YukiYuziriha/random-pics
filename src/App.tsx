@@ -135,15 +135,19 @@ export default function App() {
         }}
       >
         <PrevButton onLoadImage={() => handleLoadImage(PREV_ENDPOINT)} />
+        
         <NextButton onLoadImage={() => handleLoadImage(NEXT_ENDPOINT)} />
+        
         <PrevRandomButton onLoadImage={ async () => {
           await handleLoadImage(PREV_RANDOM_ENDPOINT)
           await loadHistory();
-        }} />          <ForceRandomButton onLoadImage={ async () => { 
+        }} />          
+
+        <ForceRandomButton onLoadImage={ async () => { 
           await handleLoadImage(FORCE_RANDOM_ENDPOINT);
           await loadHistory();
         }} />
-
+        
         <NextRandomButton onLoadImage={ async () => { 
           await handleLoadImage(NEXT_RANDOM_ENDPOINT);
           await loadHistory();
