@@ -1,3 +1,24 @@
+# Developer tools' files
+.lite_workspace.lua
+
+# Neutralinojs binaries and builds
+/bin
+/dist
+
+# Neutralinojs client (minified)
+neutralino.js
+
+# Neutralinojs related files
+.storage
+*.log
+
+
+.DS_Store
+*.tsbuildinfo
+*.js
+*.d.ts
+*.map
+
 node_modules/
 dist/
 data/
@@ -5,9 +26,3 @@ bun.lockb
 .env
 .env.local
 .env.*.local
-*.log
-.DS_Store
-*.tsbuildinfo
-*.js
-*.d.ts
-*.map
