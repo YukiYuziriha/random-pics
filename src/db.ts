@@ -18,7 +18,8 @@ db.run(`
   CREATE TABLE IF NOT EXISTS state (
     id INTEGER PRIMARY KEY CHECK (id = 1),
     current_index INTEGER NOT NULL DEFAULT 0,
-    current_random_index INTEGER NOT NULL DEFAULT -1
+    current_random_index INTEGER NOT NULL DEFAULT -1,
+    current_folder_id INTEGER
   );
   CREATE TABLE IF NOT EXISTS random_history (
     order_index INTEGER PRIMARY KEY,
