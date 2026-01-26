@@ -7,7 +7,7 @@ const insertFolder = db.query(`
                               INSERT OR IGNORE INTO folders (path, added_at)
                               VALUES ($path, $addedAt)
                               `);
-const getFolder = db.query(`
+const getFolderIdByPath = db.query(`
                            SELECT id FROM folders WHERE path = ?
                            `);
 const countImages = db.query(`
@@ -41,6 +41,9 @@ const setCurrentRandomIndex = db.query(`
                                         SET current_random_index = $currentRandomIndex
                                         WHERE ID = 1
                                        `)
+const setCurrentFolderByPathId = db.query(`
+                                    UPDATE state SET current_folder_id = $id WHERE id = 1
+                                    `);
 const historyCount = db.query(`
                               SELECT COUNT(*) AS count
                               FROM random_history
@@ -62,9 +65,20 @@ const getRandomHistory = db.query(`
                                   JOIN images i ON i.id = rh.image_id
                                   ORDER BY rh.order_index
                                   `);
-const getCurrentPointer = db.query(`
+const getCurrentRandomIndex = db.query(`
                                    SELECT current_random_index FROM state WHERE id = 1
                                    `);
+const getCurrentFolderId= db.query(`
+                                  SELECT current_folder_id FROM state WHERE id = 1
+                                  `);
+const getFolderPathById = db.query(`
+                                   SELECT path FROM folders WHERE id = ?
+                                   `);
+const getFolderHistoryQuery = db.query(`
+                                       SELECT id, path, added_at
+                                       FROM folders
+                                       ORDER BY added_at DESC
+                                       `);
 
 function historyShiftUpSafe(): void {
   db.run("BEGIN");
@@ -75,7 +89,7 @@ function historyShiftUpSafe(): void {
 
 async function ensureImagesIndexed(): Promise<number> {
   insertFolder.run({ $path: dirPath, $addedAt: new Date().toISOString() });
-  const folder = getFolder.get(dirPath) as { id: number } | null;
+  const folder = getFolderIdByPath.get(dirPath) as { id: number } | null;
   if (!folder) {
     throw new Error("no folder???");
   }
@@ -202,6 +216,7 @@ export async function getForceRandomImage(forcePointerToLast: boolean = true): P
   }
   return loadByImageId(imageId);
 }
+
 export async function getNextImage(): Promise<ArrayBuffer> {
   const folderId = await ensureImagesIndexed();
   const imageIds = getImageIds(folderId);
@@ -213,6 +228,7 @@ export async function getNextImage(): Promise<ArrayBuffer> {
   setCurrentIndex.run({ $currentIndex: nextIndex });
   return loadByImageId(imageIds[nextIndex]!);
 }
+
 export async function getPrevImage(): Promise<ArrayBuffer> {
   const folderId = await ensureImagesIndexed();
   const imageIds = getImageIds(folderId);
@@ -227,6 +243,30 @@ export async function getPrevImage(): Promise<ArrayBuffer> {
 
 export function getRandomHistoryAndPointer(): { history: string[]; currentIndex: number } {
   const rows = getRandomHistory.all() as { path: string }[];
-  const pointer = getCurrentPointer.get() as { current_random_index: number };
+  const pointer = getCurrentRandomIndex.get() as { current_random_index: number };
   return { history: rows.map(r => r.path), currentIndex: pointer.current_random_index };
+}
+
+export function setCurrentFolderByPath(path: string): number {
+  insertFolder.run({ $path: path, $addedAt: new Date().toISOString() });
+  const row = getFolderIdByPath.get(path) as { id: number } | null;
+  if (!row) {
+    throw new Error("no such folder id")
+  }
+  setCurrentFolderByPathId.run({ $id: row.id });
+  return row.id;
+}
+
+export function getCurrentFolderIdAndPath(): { id: number; path: string } | null {
+ const current = getCurrentFolderId.get() as { current_folder_id: number | null } | null;
+ if (!current?.current_folder_id) return null;
+
+ const row = getFolderPathById.get(current.current_folder_id) as { path: string} | null;
+ if (!row) return null;
+
+ return { id: current.current_folder_id, path: row.path };
+}
+
+export function getFolderHistory(): Array<{ id: number; path: string; added_at: string }> {
+  return getFolderHistoryQuery.all() as Array<{ id: number; path: string; added_at: string }>;
 }
