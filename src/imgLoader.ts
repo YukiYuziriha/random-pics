@@ -41,7 +41,7 @@ const setCurrentRandomIndex = db.query(`
                                         SET current_random_index = $currentRandomIndex
                                         WHERE ID = 1
                                        `)
-const setCurrentFolderByPathId = db.query(`
+const setCurrentFolderId = db.query(`
                                     UPDATE state SET current_folder_id = $id WHERE id = 1
                                     `);
 const historyCount = db.query(`
@@ -253,7 +253,7 @@ export function setCurrentFolderByPath(path: string): number {
   if (!row) {
     throw new Error("no such folder id")
   }
-  setCurrentFolderByPathId.run({ $id: row.id });
+  setCurrentFolderId.run({ $id: row.id });
   return row.id;
 }
 
@@ -269,4 +269,44 @@ export function getCurrentFolderIdAndPath(): { id: number; path: string } | null
 
 export function getFolderHistory(): Array<{ id: number; path: string; added_at: string }> {
   return getFolderHistoryQuery.all() as Array<{ id: number; path: string; added_at: string }>;
+}
+
+export function getNextFolder(): { id: number; path: string } | null {
+  const history = getFolderHistory();
+  if (history.length === 0) return null;
+
+  const current = getCurrentFolderId.get() as { current_folder_id: number | null } | null;
+  const currentId = current?.current_folder_id ?? null;
+
+  if (currentId == null) {
+    const oldest = history[history.length - 1]!;
+    setCurrentFolderId.run({ $id: oldest.id });
+    console.log("our history is over");
+    return oldest;
+  }
+
+  const idx = history.findIndex((f) => f.id === currentId);
+  const next = idx <= 0 ? history[history.length - 1]! : history[idx - 1]!;
+  setCurrentFolderId.run({ $id: next.id });
+  return next;
+}
+
+export function getPrevFolder(): { id: number; path: string } | null {
+  const history = getFolderHistory();
+  if (history.length === 0) return null;
+
+  const current = getCurrentFolderId.get() as { current_folder_id: number | null } | null;
+  const currentId = current?.current_folder_id ?? null;
+
+  if (currentId == null) {
+    const newest = history[0]!;
+    setCurrentFolderId.run({ $id: newest.id });
+    console.log("circling");
+    return newest;
+  }
+
+  const idx = history.findIndex((f) => f.id === currentId);
+  const prev = idx < 0 || idx >= history.length - 1 ? history[0]! : history[idx + 1]!;
+  setCurrentFolderId.run({ $id: prev.id });
+  return prev;
 }
