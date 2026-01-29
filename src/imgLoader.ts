@@ -1,8 +1,6 @@
 import { Glob } from "bun";
 import { db } from "./db.ts";
 
-const dirPath = "/mnt/ssd/refs/800 Rebel Girl Fighter"
-
 const insertFolder = db.query(`
                               INSERT OR IGNORE INTO folders (path, added_at)
                               VALUES ($path, $addedAt)
@@ -13,15 +11,15 @@ const getFolderIdByPath = db.query(`
 const countImages = db.query(`
                              SELECT COUNT(*) AS count
                              FROM images
-                             WHERE folder_id = ?
+                             WHERE folderId = ?
                              `);
 const insertImage = db.query(`
-                             INSERT OR IGNORE INTO IMAGES (path, folder_id)
+                             INSERT OR IGNORE INTO IMAGES (path, folderId)
                              VALUES ($path, $folderId)
                              `);
 const listImageIds = db.query(`
                               SELECT id FROM images
-                              WHERE folder_id = ?
+                              WHERE folderId = ?
                               ORDER BY id
                               `);
 const getImagePath = db.query(`
@@ -42,7 +40,7 @@ const setCurrentRandomIndex = db.query(`
                                         WHERE ID = 1
                                        `)
 const setCurrentFolderId = db.query(`
-                                    UPDATE state SET current_folder_id = $id WHERE id = 1
+                                    UPDATE state SET current_folderId = $id WHERE id = 1
                                     `);
 const historyCount = db.query(`
                               SELECT COUNT(*) AS count
@@ -69,7 +67,7 @@ const getCurrentRandomIndex = db.query(`
                                    SELECT current_random_index FROM state WHERE id = 1
                                    `);
 const getCurrentFolderId= db.query(`
-                                  SELECT current_folder_id FROM state WHERE id = 1
+                                  SELECT current_folderId FROM state WHERE id = 1
                                   `);
 const getFolderPathById = db.query(`
                                    SELECT path FROM folders WHERE id = ?
@@ -88,34 +86,35 @@ function historyShiftUpSafe(): void {
 }
 
 async function ensureImagesIndexed(): Promise<number> {
-  insertFolder.run({ $path: dirPath, $addedAt: new Date().toISOString() });
-  const folder = getFolderIdByPath.get(dirPath) as { id: number } | null;
-  if (!folder) {
+  const current = getCurrentFolderIdAndPath();
+  if (!current) {
     throw new Error("no folder???");
   }
 
-  const countRow = countImages.get(folder.id) as {count: number };
+  const { id: folderId, path: folderPath } = current;
+
+  const countRow = countImages.get(folderId) as { count: number };
   if (countRow.count > 0) {
-    return folder.id;
+    return folderId;
   }
 
   const glob = new Glob("**/*.{jpeg,jpg,png,gif,webp}");
 
   for await (const file of glob.scan({
-    cwd: dirPath,
+    cwd: folderPath,
     onlyFiles: true,
     absolute: true,
   })) {
-    insertImage.run({ $path: file, $folderId: folder.id });
+    insertImage.run({ $path: file, $folderId: folderId });
   }
 
-  const afterRow = countImages.get(folder.id) as { count: number };
+  const afterRow = countImages.get(folderId) as { count: number };
   if (afterRow.count === 0) {
     console.log("no bitches");
     throw new Error("no images available");
   }
 
-  return folder.id;
+  return folderId;
 }
 
 function getImageIds(folderId: number): number[] {
@@ -251,20 +250,20 @@ export function setCurrentFolderByPath(path: string): number {
   insertFolder.run({ $path: path, $addedAt: new Date().toISOString() });
   const row = getFolderIdByPath.get(path) as { id: number } | null;
   if (!row) {
-    throw new Error("no such folder id")
+    throw new Error("no such folderId")
   }
   setCurrentFolderId.run({ $id: row.id });
   return row.id;
 }
 
 export function getCurrentFolderIdAndPath(): { id: number; path: string } | null {
- const current = getCurrentFolderId.get() as { current_folder_id: number | null } | null;
- if (!current?.current_folder_id) return null;
+ const current = getCurrentFolderId.get() as { current_folderId: number | null } | null;
+ if (!current?.current_folderId) return null;
 
- const row = getFolderPathById.get(current.current_folder_id) as { path: string} | null;
+ const row = getFolderPathById.get(current.current_folderId) as { path: string} | null;
  if (!row) return null;
 
- return { id: current.current_folder_id, path: row.path };
+ return { id: current.current_folderId, path: row.path };
 }
 
 export function getFolderHistory(): Array<{ id: number; path: string; added_at: string }> {
@@ -275,8 +274,8 @@ export function getNextFolder(): { id: number; path: string } | null {
   const history = getFolderHistory();
   if (history.length === 0) return null;
 
-  const current = getCurrentFolderId.get() as { current_folder_id: number | null } | null;
-  const currentId = current?.current_folder_id ?? null;
+  const current = getCurrentFolderId.get() as { current_folderId: number | null } | null;
+  const currentId = current?.current_folderId ?? null;
 
   if (currentId == null) {
     const oldest = history[history.length - 1]!;
@@ -295,8 +294,8 @@ export function getPrevFolder(): { id: number; path: string } | null {
   const history = getFolderHistory();
   if (history.length === 0) return null;
 
-  const current = getCurrentFolderId.get() as { current_folder_id: number | null } | null;
-  const currentId = current?.current_folder_id ?? null;
+  const current = getCurrentFolderId.get() as { current_folderId: number | null } | null;
+  const currentId = current?.current_folderId ?? null;
 
   if (currentId == null) {
     const newest = history[0]!;
