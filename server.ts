@@ -1,5 +1,5 @@
-import { getNextRandomImage, getNextImage, getPrevImage, getPrevRandomImage, getForceRandomImage, getRandomHistoryAndPointer, getNextFolder, getPrevFolder, getCurrentFolderIdAndPath, getFolderHistory, setCurrentFolderAndIndexIt } from "./src/imgLoader.ts";
-import { API_PREFIX, NEXT_RANDOM_ENDPOINT, PREV_RANDOM_ENDPOINT, FORCE_RANDOM_ENDPOINT, NEXT_ENDPOINT, PREV_ENDPOINT, RANDOM_HISTORY_ENDPOINT, NEXT_FOLDER_ENDPOINT, PREV_FOLDER_ENDPOINT, FOLDER_HISTORY_ENDPOINT, PICK_FOLDER_ENDPOINT } from "./src/constants/endpoints.ts";
+import { getNextRandomImage, getNextImage, getPrevImage, getPrevRandomImage, getForceRandomImage, getRandomHistoryAndPointer, getNormalHistoryAndPointer, getNextFolder, getPrevFolder, getCurrentFolderIdAndPath, getFolderHistory, setCurrentFolderAndIndexIt } from "./src/imgLoader.ts";
+import { API_PREFIX, NEXT_RANDOM_ENDPOINT, PREV_RANDOM_ENDPOINT, FORCE_RANDOM_ENDPOINT, NEXT_ENDPOINT, PREV_ENDPOINT, RANDOM_HISTORY_ENDPOINT, NORMAL_HISTORY_ENDPOINT, NEXT_FOLDER_ENDPOINT, PREV_FOLDER_ENDPOINT, FOLDER_HISTORY_ENDPOINT, PICK_FOLDER_ENDPOINT } from "./src/constants/endpoints.ts";
 
 const PORT: number = 3000;
 Bun.serve({
@@ -47,6 +47,13 @@ Bun.serve({
 
     if (req.url.endsWith(`${API_PREFIX}${RANDOM_HISTORY_ENDPOINT}`)) {
       const history = getRandomHistoryAndPointer();
+      return new Response(JSON.stringify(history), {
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+
+    if (req.url.endsWith(`${API_PREFIX}${NORMAL_HISTORY_ENDPOINT}`)) {
+      const history = getNormalHistoryAndPointer();
       return new Response(JSON.stringify(history), {
         headers: { "Content-Type": "application/json" },
       });

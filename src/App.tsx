@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { NEXT_RANDOM_ENDPOINT, PREV_RANDOM_ENDPOINT, FORCE_RANDOM_ENDPOINT, NEXT_ENDPOINT, PREV_ENDPOINT, RANDOM_HISTORY_ENDPOINT, FOLDER_HISTORY_ENDPOINT, PICK_FOLDER_ENDPOINT } from "./constants/endpoints.ts";
+import { NEXT_RANDOM_ENDPOINT, PREV_RANDOM_ENDPOINT, FORCE_RANDOM_ENDPOINT, NEXT_ENDPOINT, PREV_ENDPOINT, RANDOM_HISTORY_ENDPOINT, NORMAL_HISTORY_ENDPOINT, FOLDER_HISTORY_ENDPOINT, PICK_FOLDER_ENDPOINT, NEXT_FOLDER_ENDPOINT, PREV_FOLDER_ENDPOINT } from "./constants/endpoints.ts";
 
 
 function ForceRandomButton({ onLoadImage }: { onLoadImage: () => void }) {
@@ -42,6 +42,22 @@ function PrevRandomButton({ onLoadImage }: { onLoadImage: () => void }) {
   )
 }
 
+function NextFolderButton({ onLoadFolder }: { onLoadFolder: () => void }) {
+  return (
+    <button onClick={onLoadFolder}>
+      next-folder
+    </button>
+  )
+}
+
+function PrevFolderButton({ onLoadFolder }: { onLoadFolder: () => void }) {
+  return (
+    <button onClick={onLoadFolder}>
+      prev-folder
+    </button>
+  )
+}
+
 function PickFolderButton({ onPick }: { onPick: () => void }) {
   return (
     <button onClick={onPick}>
@@ -57,8 +73,8 @@ export default function App() {
   const [folderHistory, setFolderHistory] = useState<string[]>([]);
   const [folderHistoryIndex, setFolderHistoryIndex] = useState(-1)
 
-  const loadHistory = async () => {
-    const res = await fetch(`/api/${RANDOM_HISTORY_ENDPOINT}`)
+  const loadHistory = async (endpoint: string) => {
+    const res = await fetch(`/api/${endpoint}`)
     const data = await res.json()
     setHistory(data.history);
     setHistoryIndex(data.currentIndex);
@@ -97,19 +113,11 @@ export default function App() {
     return handlePickFolder();
   };
 
-  const guardedLoadImage = async (endpoint: string, refreshHistory: boolean): Promise<void> => {
-    if (!(await ensureFolderSelected())) return;
-    await handleLoadImage(endpoint);
-    if (refreshHistory) {
-      await loadHistory();
-    }
-  };
-
   useEffect(() => {
     void loadFolderHistory();
   }, []);
 
-  const historyVisualSize = 51;
+  const historyVisualSize = 31;
   const half = Math.floor(historyVisualSize / 2);
   
   const windowItems = Array.from({ length: historyVisualSize }, (_, i) => {
@@ -118,6 +126,14 @@ export default function App() {
       return null;
     }
     return history[historyIndexAtSlot];
+  });
+
+  const folderWindowItems = Array.from({ length: historyVisualSize }, (_, i) => {
+    const historyIndexAtSlot = folderHistoryIndex + (half - i);
+    if (historyIndexAtSlot < 0 || historyIndexAtSlot >= folderHistory.length) {
+      return null;
+    }
+    return folderHistory[historyIndexAtSlot];
   });
 
   return (
@@ -138,10 +154,50 @@ export default function App() {
       data-testid="folder-history-panel"
       style={{
         width: '20vw',
+        height: '80vh',
+        display: 'flex',
+        flexDirection: 'column',
         flexShrink: 0,
+        justifyContent: 'center',
+        alignItems: 'stretch',
+        overflow: 'hidden',
       }}
     >
-
+      <div
+        data-testid="folder-list-container"
+        style={{
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '4px',
+          overflowY: 'auto',
+        }}
+      >
+        {folderWindowItems.map((item, i) => {
+          const isCurrent = i === half;
+          return (
+            <div
+              data-testid="folder-list-item"
+              key={`${i}-${item ?? "empty"}`}
+              style={{
+                height: "24px",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                whiteSpace: "nowrap",
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                color: item ? (isCurrent ? "#fff" : "#a0a0a0") : "transparent",
+                background: isCurrent ? "#3b2f1f" : "transparent",
+                fontWeight: isCurrent ? 700 : 400,
+                fontFamily: "monospace",
+                borderRadius: "4px",
+              }}
+            >
+              {item ? item.split("/").pop() : "placeholder"}
+            </div>
+          );
+        })}
+      </div>
     </div>
     <div
       data-testid="image-and-buttons"
@@ -153,6 +209,29 @@ export default function App() {
         alignItems: 'center',
       }}
     >
+      <div
+        data-testid="folder-buttons-row"
+        style={{
+          flexDirection: 'row',
+          display: 'flex',
+          marginBottom: 'auto',
+          alignItems: 'center',
+        }}
+      >
+        <PrevFolderButton onLoadFolder={async () => {
+          if (!(await ensureFolderSelected())) return;
+          await fetch(`/api/${PREV_FOLDER_ENDPOINT}`);
+          await loadFolderHistory();
+        }} />
+
+        <PickFolderButton onPick={async () => { await handlePickFolder(); }} />
+
+        <NextFolderButton onLoadFolder={async () => {
+          if (!(await ensureFolderSelected())) return;
+          await fetch(`/api/${NEXT_FOLDER_ENDPOINT}`);
+          await loadFolderHistory();
+        }} />
+      </div>
       <div 
         data-testid="image-container"
         style={{
@@ -174,7 +253,7 @@ export default function App() {
         />}
       </div>
       <div 
-        data-testid="buttons-row"
+        data-testid="image-buttons-row"
         style={{
           flexDirection: 'row',
           display: 'flex',
@@ -182,22 +261,34 @@ export default function App() {
           alignItems: 'center',
         }}
       >
-        <PickFolderButton onPick={async () => { await handlePickFolder(); }} />
-
-        <PrevButton onLoadImage={() => guardedLoadImage(PREV_ENDPOINT, true)} />
+        <PrevButton onLoadImage={async () => {
+          if (!(await ensureFolderSelected())) return;
+          await handleLoadImage(PREV_ENDPOINT);
+          await loadHistory(NORMAL_HISTORY_ENDPOINT);
+        }} />
         
-        <NextButton onLoadImage={() => guardedLoadImage(NEXT_ENDPOINT, true)} />
+        <NextButton onLoadImage={async () => {
+          if (!(await ensureFolderSelected())) return;
+          await handleLoadImage(NEXT_ENDPOINT);
+          await loadHistory(NORMAL_HISTORY_ENDPOINT);
+        }} />
         
         <PrevRandomButton onLoadImage={ async () => {
-          await guardedLoadImage(PREV_RANDOM_ENDPOINT, true);
+          if (!(await ensureFolderSelected())) return;
+          await handleLoadImage(PREV_RANDOM_ENDPOINT);
+          await loadHistory(RANDOM_HISTORY_ENDPOINT);
         }} />          
 
         <ForceRandomButton onLoadImage={ async () => { 
-          await guardedLoadImage(FORCE_RANDOM_ENDPOINT, true);
+          if (!(await ensureFolderSelected())) return;
+          await handleLoadImage(FORCE_RANDOM_ENDPOINT);
+          await loadHistory(RANDOM_HISTORY_ENDPOINT);
         }} />
         
         <NextRandomButton onLoadImage={ async () => { 
-          await guardedLoadImage(NEXT_RANDOM_ENDPOINT, true);
+          if (!(await ensureFolderSelected())) return;
+          await handleLoadImage(NEXT_RANDOM_ENDPOINT);
+          await loadHistory(RANDOM_HISTORY_ENDPOINT);
         }} />
       </div>
     </div>
@@ -234,6 +325,9 @@ export default function App() {
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
+                whiteSpace: "nowrap",
+                overflow: "hidden",
+                textOverflow: "ellipsis",
                 color: item ? (isCurrent ? "#fff" : "#a0a0a0") : "transparent",
                 background: isCurrent ? "#3b2f1f" : "transparent",
                 fontWeight: isCurrent ? 700 : 400,

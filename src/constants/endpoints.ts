@@ -5,6 +5,7 @@ export const FORCE_RANDOM_ENDPOINT = "force_random"
 export const NEXT_ENDPOINT = "next";
 export const PREV_ENDPOINT = "prev";
 export const RANDOM_HISTORY_ENDPOINT = "random_history";
+export const NORMAL_HISTORY_ENDPOINT = "normal_history";
 export const NEXT_FOLDER_ENDPOINT = "next_folder";
 export const PREV_FOLDER_ENDPOINT = "prev_folder";
 export const PICK_FOLDER_ENDPOINT = "pick_folder";
