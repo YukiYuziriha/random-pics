@@ -1,5 +1,5 @@
-import { getNextRandomImage, getNextImage, getPrevImage, getPrevRandomImage, getForceRandomImage, getRandomHistoryAndPointer, getNormalHistoryAndPointer, getNextFolder, getPrevFolder, getCurrentFolderIdAndPath, getFolderHistory, setCurrentFolderAndIndexIt } from "./src/imgLoader.ts";
-import { API_PREFIX, NEXT_RANDOM_ENDPOINT, PREV_RANDOM_ENDPOINT, FORCE_RANDOM_ENDPOINT, NEXT_ENDPOINT, PREV_ENDPOINT, RANDOM_HISTORY_ENDPOINT, NORMAL_HISTORY_ENDPOINT, NEXT_FOLDER_ENDPOINT, PREV_FOLDER_ENDPOINT, FOLDER_HISTORY_ENDPOINT, PICK_FOLDER_ENDPOINT } from "./src/constants/endpoints.ts";
+import { getNextRandomImage, getNextImage, getPrevImage, getPrevRandomImage, getForceRandomImage, getRandomHistoryAndPointer, getNormalHistoryAndPointer, getNextFolder, getPrevFolder, getCurrentFolderIdAndPath, getFolderHistory, setCurrentFolderAndIndexIt, reindexCurrentFolder, resetRandomHistory, resetNormalHistory, fullWipe } from "./src/imgLoader.ts";
+import { API_PREFIX, NEXT_RANDOM_ENDPOINT, PREV_RANDOM_ENDPOINT, FORCE_RANDOM_ENDPOINT, NEXT_ENDPOINT, PREV_ENDPOINT, RANDOM_HISTORY_ENDPOINT, NORMAL_HISTORY_ENDPOINT, NEXT_FOLDER_ENDPOINT, PREV_FOLDER_ENDPOINT, FOLDER_HISTORY_ENDPOINT, PICK_FOLDER_ENDPOINT, REINDEX_CURRENT_FOLDER_ENDPOINT, RESET_RANDOM_HISTORY_ENDPOINT, RESET_NORMAL_HISTORY_ENDPOINT, FULL_WIPE_ENDPOINT } from "./src/constants/endpoints.ts";
 
 const PORT: number = 3000;
 Bun.serve({
@@ -125,6 +125,34 @@ Bun.serve({
       }
       const folder = await setCurrentFolderAndIndexIt(folderPath);
       return new Response(JSON.stringify(folder), {
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+
+    if (req.method === "POST" && req.url.endsWith(`${API_PREFIX}${REINDEX_CURRENT_FOLDER_ENDPOINT}`)) {
+      const folder = await reindexCurrentFolder();
+      return new Response(JSON.stringify(folder), {
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+
+    if (req.method === "POST" && req.url.endsWith(`${API_PREFIX}${RESET_RANDOM_HISTORY_ENDPOINT}`)) {
+      resetRandomHistory();
+      return new Response(JSON.stringify({ ok: true }), {
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+
+    if (req.method === "POST" && req.url.endsWith(`${API_PREFIX}${RESET_NORMAL_HISTORY_ENDPOINT}`)) {
+      resetNormalHistory();
+      return new Response(JSON.stringify({ ok: true }), {
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+
+    if (req.method === "POST" && req.url.endsWith(`${API_PREFIX}${FULL_WIPE_ENDPOINT}`)) {
+      fullWipe();
+      return new Response(JSON.stringify({ ok: true }), {
         headers: { "Content-Type": "application/json" },
       });
     }

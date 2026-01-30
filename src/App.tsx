@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { NEXT_RANDOM_ENDPOINT, PREV_RANDOM_ENDPOINT, FORCE_RANDOM_ENDPOINT, NEXT_ENDPOINT, PREV_ENDPOINT, RANDOM_HISTORY_ENDPOINT, NORMAL_HISTORY_ENDPOINT, FOLDER_HISTORY_ENDPOINT, PICK_FOLDER_ENDPOINT, NEXT_FOLDER_ENDPOINT, PREV_FOLDER_ENDPOINT } from "./constants/endpoints.ts";
+import { NEXT_RANDOM_ENDPOINT, PREV_RANDOM_ENDPOINT, FORCE_RANDOM_ENDPOINT, NEXT_ENDPOINT, PREV_ENDPOINT, RANDOM_HISTORY_ENDPOINT, NORMAL_HISTORY_ENDPOINT, FOLDER_HISTORY_ENDPOINT, PICK_FOLDER_ENDPOINT, NEXT_FOLDER_ENDPOINT, PREV_FOLDER_ENDPOINT, REINDEX_CURRENT_FOLDER_ENDPOINT, RESET_RANDOM_HISTORY_ENDPOINT, RESET_NORMAL_HISTORY_ENDPOINT, FULL_WIPE_ENDPOINT } from "./constants/endpoints.ts";
 
 
 function ForceRandomButton({ onLoadImage }: { onLoadImage: () => void }) {
@@ -38,6 +38,38 @@ function PrevRandomButton({ onLoadImage }: { onLoadImage: () => void }) {
   return (
     <button onClick={onLoadImage}>
       prev-random
+    </button>
+  )
+}
+
+function ReindexFolderButton({ onReindex }: { onReindex: () => void }) {
+  return (
+    <button onClick={onReindex}>
+      reindex-folder
+    </button>
+  )
+}
+
+function ResetRandomHistoryButton({ onReset }: { onReset: () => void }) {
+  return (
+    <button onClick={onReset}>
+      reset-random-history
+    </button>
+  )
+}
+
+function ResetNormalHistoryButton({ onReset }: { onReset: () => void }) {
+  return (
+    <button onClick={onReset}>
+      reset_normal_history
+    </button>
+  )
+}
+
+function FullWipeButton({ onWipe }: { onWipe: () => void }) {
+  return (
+    <button onClick={onWipe}>
+      full_wipe
     </button>
   )
 }
@@ -226,10 +258,26 @@ export default function App() {
 
         <PickFolderButton onPick={async () => { await handlePickFolder(); }} />
 
+        <ReindexFolderButton onReindex={async () => {
+          if (!(await ensureFolderSelected())) return;
+          await fetch(`/api/${REINDEX_CURRENT_FOLDER_ENDPOINT}`, { method: "POST" });
+          await loadFolderHistory();
+          await loadHistory(NORMAL_HISTORY_ENDPOINT);
+        }} />
+
         <NextFolderButton onLoadFolder={async () => {
           if (!(await ensureFolderSelected())) return;
           await fetch(`/api/${NEXT_FOLDER_ENDPOINT}`);
           await loadFolderHistory();
+        }} />
+
+        <FullWipeButton onWipe={async () => {
+          await fetch(`/api/${FULL_WIPE_ENDPOINT}`, { method: "POST" });
+          setImageSrc("");
+          setHistory([]);
+          setHistoryIndex(-1);
+          setFolderHistory([]);
+          setFolderHistoryIndex(-1);
         }} />
       </div>
       <div 
@@ -289,6 +337,16 @@ export default function App() {
           if (!(await ensureFolderSelected())) return;
           await handleLoadImage(NEXT_RANDOM_ENDPOINT);
           await loadHistory(RANDOM_HISTORY_ENDPOINT);
+        }} />
+
+        <ResetRandomHistoryButton onReset={async () => {
+          await fetch(`/api/${RESET_RANDOM_HISTORY_ENDPOINT}`, { method: "POST" });
+          await loadHistory(RANDOM_HISTORY_ENDPOINT);
+        }} />
+
+        <ResetNormalHistoryButton onReset={async () => {
+          await fetch(`/api/${RESET_NORMAL_HISTORY_ENDPOINT}`, { method: "POST" });
+          await loadHistory(NORMAL_HISTORY_ENDPOINT);
         }} />
       </div>
     </div>

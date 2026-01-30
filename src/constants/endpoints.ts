@@ -10,3 +10,7 @@ export const NEXT_FOLDER_ENDPOINT = "next_folder";
 export const PREV_FOLDER_ENDPOINT = "prev_folder";
 export const PICK_FOLDER_ENDPOINT = "pick_folder";
 export const FOLDER_HISTORY_ENDPOINT = "folder_history";
+export const REINDEX_CURRENT_FOLDER_ENDPOINT = "reindex_current_folder";
+export const RESET_RANDOM_HISTORY_ENDPOINT = "reset_random_history";
+export const RESET_NORMAL_HISTORY_ENDPOINT = "reset_normal_history";
+export const FULL_WIPE_ENDPOINT = "full_wipe";

@@ -14,9 +14,14 @@ const countImages = db.query(`
                               WHERE folder_id = ?
                               `);
 const insertImage = db.query(`
-                              INSERT OR IGNORE INTO images (path, folder_id)
-                              VALUES ($path, $folderId)
-                              `);
+                               INSERT OR IGNORE INTO images (path, folder_id)
+                               VALUES ($path, $folderId)
+                               `);
+const insertImageBatch = db.transaction((rows: Array<{ path: string; folderId: number }>) => {
+  for (const row of rows) {
+    insertImage.run({ $path: row.path, $folderId: row.folderId });
+  }
+});
 const listImageIds = db.query(`
                                SELECT id FROM images
                                WHERE folder_id = ?
@@ -81,10 +86,14 @@ const getFolderPathById = db.query(`
                                    SELECT path FROM folders WHERE id = ?
                                    `);
 const getFolderHistoryQuery = db.query(`
-                                       SELECT id, path, added_at
-                                       FROM folders
-                                       ORDER BY added_at DESC
-                                       `);
+                                        SELECT id, path, added_at
+                                        FROM folders
+                                        ORDER BY added_at DESC
+                                        `);
+const deleteImagesByFolderId = db.query(`
+                                         DELETE FROM images
+                                         WHERE folder_id = ?
+                                         `);
 
 function randomHistoryShiftUpSafe(): void {
   db.run("BEGIN");
@@ -130,6 +139,15 @@ function setCurrentRandomHistoryIndex(index: number): void {
   setCurrentRandomIndex.run({ $currentRandomIndex: index });
 }
 
+function clearRandomHistory(): void {
+  db.run("DELETE FROM random_history");
+  setCurrentRandomHistoryIndex(-1);
+}
+
+function clearLap(): void {
+  lapClear.run();
+}
+
 function addToLap(imageId: number): void {
   lapInsert.run({ $imageId: imageId });
 }
@@ -160,12 +178,17 @@ async function ensureImagesIndexed(): Promise<number> {
 
   const glob = new Glob("**/*.{jpeg,jpg,png,gif,webp}");
 
+  const rows: Array<{ path: string; folderId: number }> = [];
   for await (const file of glob.scan({
     cwd: folderPath,
     onlyFiles: true,
     absolute: true,
   })) {
-    insertImage.run({ $path: file, $folderId: folderId });
+    rows.push({ path: file, folderId: folderId });
+  }
+
+  if (rows.length > 0) {
+    insertImageBatch(rows);
   }
 
   const afterRow = countImages.get(folderId) as { count: number };
@@ -309,6 +332,38 @@ export function getNormalHistoryAndPointer(): { history: string[]; currentIndex:
   const rows = listImagePaths.all(current.id) as { path: string }[];
   const pointer = getCurrentIndex.get() as { current_index: number };
   return { history: rows.map(r => r.path), currentIndex: pointer.current_index };
+}
+
+export async function reindexCurrentFolder(): Promise<{ id: number; path: string }> {
+  const current = getCurrentFolderIdAndPath();
+  if (!current) {
+    throw new Error("no current folder set");
+  }
+  deleteImagesByFolderId.run(current.id);
+  clearLap();
+  clearRandomHistory();
+  setCurrentNormalHistoryIndex(-1);
+  await ensureImagesIndexed();
+  return current;
+}
+
+export function resetRandomHistory(): void {
+  clearRandomHistory();
+  clearLap();
+}
+
+export function resetNormalHistory(): void {
+  setCurrentNormalHistoryIndex(-1);
+}
+
+export function fullWipe(): void {
+  db.run("DELETE FROM folders");
+  db.run("DELETE FROM images");
+  db.run("DELETE FROM random_history");
+  clearLap();
+  setCurrentNormalHistoryIndex(-1);
+  setCurrentRandomHistoryIndex(-1);
+  setCurrentFolderId.run({ $id: null });
 }
 
 export function setCurrentFolderByPath(path: string): number {
