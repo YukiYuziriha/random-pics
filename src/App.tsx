@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { NEXT_RANDOM_ENDPOINT, PREV_RANDOM_ENDPOINT, FORCE_RANDOM_ENDPOINT, NEXT_ENDPOINT, PREV_ENDPOINT, RANDOM_HISTORY_ENDPOINT, NORMAL_HISTORY_ENDPOINT, FOLDER_HISTORY_ENDPOINT, PICK_FOLDER_ENDPOINT, NEXT_FOLDER_ENDPOINT, PREV_FOLDER_ENDPOINT, REINDEX_CURRENT_FOLDER_ENDPOINT, RESET_RANDOM_HISTORY_ENDPOINT, RESET_NORMAL_HISTORY_ENDPOINT, FULL_WIPE_ENDPOINT } from "./constants/endpoints.ts";
+import { NEXT_RANDOM_ENDPOINT, PREV_RANDOM_ENDPOINT, FORCE_RANDOM_ENDPOINT, NEXT_ENDPOINT, PREV_ENDPOINT, CURRENT_IMAGE_ENDPOINT, RANDOM_HISTORY_ENDPOINT, NORMAL_HISTORY_ENDPOINT, FOLDER_HISTORY_ENDPOINT, PICK_FOLDER_ENDPOINT, NEXT_FOLDER_ENDPOINT, PREV_FOLDER_ENDPOINT, REINDEX_CURRENT_FOLDER_ENDPOINT, RESET_RANDOM_HISTORY_ENDPOINT, RESET_NORMAL_HISTORY_ENDPOINT, FULL_WIPE_ENDPOINT } from "./constants/endpoints.ts";
 
 
 function ForceRandomButton({ onLoadImage }: { onLoadImage: () => void }) {
@@ -137,6 +137,8 @@ export default function App() {
     });
 
     await loadFolderHistory();
+    await handleLoadImage(CURRENT_IMAGE_ENDPOINT);
+    await loadHistory(NORMAL_HISTORY_ENDPOINT);
     return true;
   };
 
@@ -254,6 +256,8 @@ export default function App() {
           if (!(await ensureFolderSelected())) return;
           await fetch(`/api/${PREV_FOLDER_ENDPOINT}`);
           await loadFolderHistory();
+          await handleLoadImage(CURRENT_IMAGE_ENDPOINT);
+          await loadHistory(NORMAL_HISTORY_ENDPOINT);
         }} />
 
         <PickFolderButton onPick={async () => { await handlePickFolder(); }} />
@@ -262,6 +266,7 @@ export default function App() {
           if (!(await ensureFolderSelected())) return;
           await fetch(`/api/${REINDEX_CURRENT_FOLDER_ENDPOINT}`, { method: "POST" });
           await loadFolderHistory();
+          await handleLoadImage(CURRENT_IMAGE_ENDPOINT);
           await loadHistory(NORMAL_HISTORY_ENDPOINT);
         }} />
 
@@ -269,6 +274,8 @@ export default function App() {
           if (!(await ensureFolderSelected())) return;
           await fetch(`/api/${NEXT_FOLDER_ENDPOINT}`);
           await loadFolderHistory();
+          await handleLoadImage(CURRENT_IMAGE_ENDPOINT);
+          await loadHistory(NORMAL_HISTORY_ENDPOINT);
         }} />
 
         <FullWipeButton onWipe={async () => {

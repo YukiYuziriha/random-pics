@@ -1,5 +1,5 @@
-import { getNextRandomImage, getNextImage, getPrevImage, getPrevRandomImage, getForceRandomImage, getRandomHistoryAndPointer, getNormalHistoryAndPointer, getNextFolder, getPrevFolder, getCurrentFolderIdAndPath, getFolderHistory, setCurrentFolderAndIndexIt, reindexCurrentFolder, resetRandomHistory, resetNormalHistory, fullWipe } from "./src/imgLoader.ts";
-import { API_PREFIX, NEXT_RANDOM_ENDPOINT, PREV_RANDOM_ENDPOINT, FORCE_RANDOM_ENDPOINT, NEXT_ENDPOINT, PREV_ENDPOINT, RANDOM_HISTORY_ENDPOINT, NORMAL_HISTORY_ENDPOINT, NEXT_FOLDER_ENDPOINT, PREV_FOLDER_ENDPOINT, FOLDER_HISTORY_ENDPOINT, PICK_FOLDER_ENDPOINT, REINDEX_CURRENT_FOLDER_ENDPOINT, RESET_RANDOM_HISTORY_ENDPOINT, RESET_NORMAL_HISTORY_ENDPOINT, FULL_WIPE_ENDPOINT } from "./src/constants/endpoints.ts";
+import { getNextRandomImage, getNextImage, getPrevImage, getPrevRandomImage, getForceRandomImage, getCurrentImageOrFirst, getRandomHistoryAndPointer, getNormalHistoryAndPointer, getNextFolder, getPrevFolder, getCurrentFolderIdAndPath, getFolderHistory, setCurrentFolderAndIndexIt, reindexCurrentFolder, resetRandomHistory, resetNormalHistory, fullWipe } from "./src/imgLoader.ts";
+import { API_PREFIX, NEXT_RANDOM_ENDPOINT, PREV_RANDOM_ENDPOINT, FORCE_RANDOM_ENDPOINT, NEXT_ENDPOINT, PREV_ENDPOINT, CURRENT_IMAGE_ENDPOINT, RANDOM_HISTORY_ENDPOINT, NORMAL_HISTORY_ENDPOINT, NEXT_FOLDER_ENDPOINT, PREV_FOLDER_ENDPOINT, FOLDER_HISTORY_ENDPOINT, PICK_FOLDER_ENDPOINT, REINDEX_CURRENT_FOLDER_ENDPOINT, RESET_RANDOM_HISTORY_ENDPOINT, RESET_NORMAL_HISTORY_ENDPOINT, FULL_WIPE_ENDPOINT } from "./src/constants/endpoints.ts";
 
 const PORT: number = 3000;
 Bun.serve({
@@ -40,6 +40,13 @@ Bun.serve({
 
     if (req.url.endsWith(`${API_PREFIX}${PREV_ENDPOINT}`)) {
       const imageBuffer = await getPrevImage();
+      return new Response(imageBuffer, {
+        headers: { "Content-Type": "image/jpeg" }
+      });
+    }
+
+    if (req.url.endsWith(`${API_PREFIX}${CURRENT_IMAGE_ENDPOINT}`)) {
+      const imageBuffer = await getCurrentImageOrFirst();
       return new Response(imageBuffer, {
         headers: { "Content-Type": "image/jpeg" }
       });

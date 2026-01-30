@@ -4,6 +4,7 @@ export const PREV_RANDOM_ENDPOINT = "prev_random";
 export const FORCE_RANDOM_ENDPOINT = "force_random"
 export const NEXT_ENDPOINT = "next";
 export const PREV_ENDPOINT = "prev";
+export const CURRENT_IMAGE_ENDPOINT = "current_image";
 export const RANDOM_HISTORY_ENDPOINT = "random_history";
 export const NORMAL_HISTORY_ENDPOINT = "normal_history";
 export const NEXT_FOLDER_ENDPOINT = "next_folder";
