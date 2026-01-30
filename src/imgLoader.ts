@@ -336,6 +336,12 @@ export function setCurrentFolderByPath(path: string): number {
   return row.id;
 }
 
+export async function setCurrentFolderAndIndexIt(path: string): Promise<{ id: number; path: string }> {
+  const id = setCurrentFolderByPath(path);
+  await ensureImagesIndexed();
+  return { id, path };
+}
+
 export function getCurrentFolderIdAndPath(): { id: number; path: string } | null {
  const current = getCurrentFolderId.get() as { current_folder_id: number | null } | null;
  if (!current?.current_folder_id) return null;
