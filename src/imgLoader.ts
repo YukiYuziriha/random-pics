@@ -9,39 +9,30 @@ const getFolderIdByPath = db.query(`
                            SELECT id FROM folders WHERE path = ?
                            `);
 const countImages = db.query(`
-                             SELECT COUNT(*) AS count
-                             FROM images
-                             WHERE folderId = ?
-                             `);
-const insertImage = db.query(`
-                             INSERT OR IGNORE INTO IMAGES (path, folderId)
-                             VALUES ($path, $folderId)
-                             `);
-const listImageIds = db.query(`
-                              SELECT id FROM images
-                              WHERE folderId = ?
-                              ORDER BY id
+                              SELECT COUNT(*) AS count
+                              FROM images
+                              WHERE folder_id = ?
                               `);
+const insertImage = db.query(`
+                              INSERT OR IGNORE INTO images (path, folder_id)
+                              VALUES ($path, $folderId)
+                              `);
+const listImageIds = db.query(`
+                               SELECT id FROM images
+                               WHERE folder_id = ?
+                               ORDER BY id
+                               `);
 const getImagePath = db.query(`
                               SELECT path FROM images WHERE id = ?
                               `);
-const getState = db.query(`
-                          SELECT current_index, current_random_index
-                          FROM state WHERE id = 1
-                          `);
 const setCurrentIndex = db.query(`
                                  UPDATE state
                                  SET current_index = $currentIndex
                                  WHERE id = 1
                                  `);
-const setCurrentRandomIndex = db.query(`
-                                        UPDATE state
-                                        SET current_random_index = $currentRandomIndex
-                                        WHERE ID = 1
-                                       `)
 const setCurrentFolderId = db.query(`
-                                    UPDATE state SET current_folderId = $id WHERE id = 1
-                                    `);
+                                     UPDATE state SET current_folder_id = $id WHERE id = 1
+                                     `);
 const historyCount = db.query(`
                               SELECT COUNT(*) AS count
                               FROM random_history
@@ -57,18 +48,22 @@ const historyInsert = db.query(`
                                 INSERT INTO random_history (order_index, image_id)
                                 VALUES ($orderIndex, $imageId)
                                 `);
+const lapCount = db.query(`SELECT COUNT(*) AS count FROM current_lap`);
+const lapHas = db.query(`SELECT 1 FROM current_lap WHERE image_id = ? LIMIT 1`);
+const lapInsert = db.query(`INSERT OR IGNORE INTO current_lap (image_id) VALUES ($imageId)`);
+const lapClear = db.query(`DELETE FROM current_lap`);
 const getRandomHistory = db.query(`
                                   SELECT rh.order_index, i.path
                                   FROM random_history rh
                                   JOIN images i ON i.id = rh.image_id
                                   ORDER BY rh.order_index
                                   `);
-const getCurrentRandomIndex = db.query(`
-                                   SELECT current_random_index FROM state WHERE id = 1
-                                   `);
+const getCurrentIndex = db.query(`
+                                 SELECT current_index FROM state WHERE id = 1
+                                 `);
 const getCurrentFolderId= db.query(`
-                                  SELECT current_folderId FROM state WHERE id = 1
-                                  `);
+                                   SELECT current_folder_id FROM state WHERE id = 1
+                                   `);
 const getFolderPathById = db.query(`
                                    SELECT path FROM folders WHERE id = ?
                                    `);
@@ -83,6 +78,67 @@ function historyShiftUpSafe(): void {
   db.run("UPDATE random_history SET order_index = order_index + 1000000000");
   db.run("UPDATE random_history SET order_index = order_index - 999999999");
   db.run("COMMIT");
+}
+
+function getCurrentHistoryIndex(): number {
+  const row = getCurrentIndex.get() as { current_index: number };
+  return row.current_index;
+}
+
+function getHistoryImageIdAt(index: number): number | null {
+  if (index < 0) return null;
+  const row = historyAt.get(index) as { image_id: number } | null;
+  return row ? row.image_id : null;
+}
+
+function appendHistory(imageId: number): number {
+  const maxRow = historyMaxIndex.get() as { max_index: number };
+  const nextIndex = maxRow.max_index + 1;
+  historyInsert.run({ $orderIndex: nextIndex, $imageId: imageId });
+  return nextIndex;
+}
+
+function prependHistory(imageId: number): number {
+  historyShiftUpSafe();
+  historyInsert.run({ $orderIndex: 0, $imageId: imageId });
+  return 0;
+}
+
+function setCurrentHistoryIndex(index: number): void {
+  setCurrentIndex.run({ $currentIndex: index });
+}
+
+function addToLap(imageId: number): void {
+  lapInsert.run({ $imageId: imageId });
+}
+
+function lapHasImage(imageId: number): boolean {
+  return Boolean(lapHas.get(imageId));
+}
+
+function ensureLapCapacity(totalImages: number): void {
+  const lapRow = lapCount.get() as { count: number };
+  if (lapRow.count >= totalImages) {
+    lapClear.run();
+  }
+}
+
+function findNonLapImage(
+  imageIds: number[],
+  startIndex: number,
+  direction: 1 | -1,
+): number | null {
+  let idx = (startIndex + direction + imageIds.length) % imageIds.length;
+  let attempts = 0;
+  while (attempts < imageIds.length) {
+    const candidateId = imageIds[idx]!;
+    if (!lapHasImage(candidateId)) {
+      return candidateId;
+    }
+    idx = (idx + direction + imageIds.length) % imageIds.length;
+    attempts++;
+  }
+  return null;
 }
 
 async function ensureImagesIndexed(): Promise<number> {
@@ -140,15 +196,15 @@ export async function getNextRandomImage(): Promise<ArrayBuffer> {
     return getForceRandomImage(true);
   }
 
-  const state = getState.get() as { current_index: number; current_random_index: number };
-  if (state.current_random_index < countRow.count - 1) {
-    const nextIndex = state.current_random_index + 1;
-    const row = historyAt.get(nextIndex) as { image_id: number } | null;
-    if (!row) {
+  const currentIndex = getCurrentHistoryIndex();
+  if (currentIndex < countRow.count - 1) {
+    const nextIndex = currentIndex + 1;
+    const imageId = getHistoryImageIdAt(nextIndex);
+    if (!imageId) {
       return getForceRandomImage(true);
     }
-    setCurrentRandomIndex.run({ $currentRandomIndex: nextIndex });
-    return loadByImageId(row.image_id);
+    setCurrentHistoryIndex(nextIndex);
+    return loadByImageId(imageId);
   }
 
   return getForceRandomImage(true);
@@ -156,32 +212,32 @@ export async function getNextRandomImage(): Promise<ArrayBuffer> {
 
 export async function getPrevRandomImage(): Promise<ArrayBuffer> {
   await ensureImagesIndexed();
-  
+
   const countRow = historyCount.get() as { count: number };
   if (countRow.count === 0) {
     return getForceRandomImage(true);
   }
 
-  const state = getState.get() as { current_index: number; current_random_index: number };
-  if (state.current_random_index > 0) {
-    const prevIndex = state.current_random_index - 1;
-    const row = historyAt.get(prevIndex) as { image_id: number } | null;
-    if (!row) {
+  const currentIndex = getCurrentHistoryIndex();
+  if (currentIndex > 0) {
+    const prevIndex = currentIndex - 1;
+    const imageId = getHistoryImageIdAt(prevIndex);
+    if (!imageId) {
       return getForceRandomImage(true);
     }
-    setCurrentRandomIndex.run({ $currentRandomIndex: prevIndex });
-    return loadByImageId(row.image_id);
+    setCurrentHistoryIndex(prevIndex);
+    return loadByImageId(imageId);
   }
-  
-  if (state.current_random_index === 0) {
+
+  if (currentIndex === 0) {
     return getForceRandomImage(false);
   }
 
-  const row = historyAt.get(state.current_random_index) as { image_id: number } | null;
-  if (!row) {
+  const imageId = getHistoryImageIdAt(currentIndex);
+  if (!imageId) {
     return getForceRandomImage(true);
   }
-  return loadByImageId(row.image_id);
+  return loadByImageId(imageId);
 }
 
 export async function getForceRandomImage(forcePointerToLast: boolean = true): Promise<ArrayBuffer> {
@@ -190,28 +246,18 @@ export async function getForceRandomImage(forcePointerToLast: boolean = true): P
   if (imageIds.length === 0) {
     throw new Error("no images available");
   }
-  const lapCount = db.query(`SELECT COUNT(*) AS count FROM random_lap`);
-  const lapHas = db.query(`SELECT 1 FROM random_lap WHERE image_id = ? LIMIT 1`);
-  const lapInsert = db.query(`INSERT OR IGNORE INTO random_lap (image_id) VALUES ($imageId)`);
-  const lapClear = db.query(`DELETE FROM random_lap`);
-  const lapRow = lapCount.get() as { count: number };
-  if (lapRow.count >= imageIds.length) {
-    lapClear.run();
-  }
+  ensureLapCapacity(imageIds.length);
   let imageId = imageIds[Math.floor(Math.random() * imageIds.length)]!;
-  while (lapHas.get(imageId)) {
+  while (lapHasImage(imageId)) {
     imageId = imageIds[Math.floor(Math.random() * imageIds.length)]!;
   }
-  lapInsert.run({ $imageId: imageId });
+  addToLap(imageId);
   if (forcePointerToLast) {
-    const maxRow = historyMaxIndex.get() as { max_index: number };
-    const nextIndex = maxRow.max_index + 1;
-    historyInsert.run({ $orderIndex: nextIndex, $imageId: imageId });
-    setCurrentRandomIndex.run({ $currentRandomIndex: nextIndex });
+    const nextIndex = appendHistory(imageId);
+    setCurrentHistoryIndex(nextIndex);
   } else {
-    historyShiftUpSafe();
-    historyInsert.run({ $orderIndex: 0, $imageId: imageId });
-    setCurrentRandomIndex.run({ $currentRandomIndex: 0 });
+    const nextIndex = prependHistory(imageId);
+    setCurrentHistoryIndex(nextIndex);
   }
   return loadByImageId(imageId);
 }
@@ -222,10 +268,27 @@ export async function getNextImage(): Promise<ArrayBuffer> {
   if (imageIds.length === 0) {
     throw new Error("no images available");
   }
-  const state = getState.get() as { current_index: number; current_random_index: number };
-  const nextIndex = (state.current_index + 1) % imageIds.length;
-  setCurrentIndex.run({ $currentIndex: nextIndex });
-  return loadByImageId(imageIds[nextIndex]!);
+
+  const currentIndex = getCurrentHistoryIndex();
+  const currentImageId = getHistoryImageIdAt(currentIndex);
+
+  let startIndex = 0;
+  if (currentImageId !== null) {
+    const currentIdx = imageIds.indexOf(currentImageId);
+    if (currentIdx >= 0) {
+      startIndex = currentIdx;
+    }
+  }
+
+  const candidateImageId = findNonLapImage(imageIds, startIndex, 1);
+  if (candidateImageId) {
+    addToLap(candidateImageId);
+    const nextHistoryIndex = appendHistory(candidateImageId);
+    setCurrentHistoryIndex(nextHistoryIndex);
+    return loadByImageId(candidateImageId);
+  }
+
+  return getForceRandomImage(true);
 }
 
 export async function getPrevImage(): Promise<ArrayBuffer> {
@@ -234,16 +297,33 @@ export async function getPrevImage(): Promise<ArrayBuffer> {
   if (imageIds.length === 0) {
     throw new Error("no images available");
   }
-  const state = getState.get() as { current_index: number; current_random_index: number };
-  const prevIndex = (state.current_index - 1 + imageIds.length) % imageIds.length;
-  setCurrentIndex.run({ $currentIndex: prevIndex });
-  return loadByImageId(imageIds[prevIndex]!);
+
+  const currentIndex = getCurrentHistoryIndex();
+  const currentImageId = getHistoryImageIdAt(currentIndex);
+
+  let startIndex = 0;
+  if (currentImageId !== null) {
+    const currentIdx = imageIds.indexOf(currentImageId);
+    if (currentIdx >= 0) {
+      startIndex = currentIdx;
+    }
+  }
+
+  const candidateImageId = findNonLapImage(imageIds, startIndex, -1);
+  if (candidateImageId) {
+    addToLap(candidateImageId);
+    const nextHistoryIndex = appendHistory(candidateImageId);
+    setCurrentHistoryIndex(nextHistoryIndex);
+    return loadByImageId(candidateImageId);
+  }
+
+  return getForceRandomImage(true);
 }
 
 export function getRandomHistoryAndPointer(): { history: string[]; currentIndex: number } {
   const rows = getRandomHistory.all() as { path: string }[];
-  const pointer = getCurrentRandomIndex.get() as { current_random_index: number };
-  return { history: rows.map(r => r.path), currentIndex: pointer.current_random_index };
+  const pointer = getCurrentIndex.get() as { current_index: number };
+  return { history: rows.map(r => r.path), currentIndex: pointer.current_index };
 }
 
 export function setCurrentFolderByPath(path: string): number {
@@ -257,13 +337,13 @@ export function setCurrentFolderByPath(path: string): number {
 }
 
 export function getCurrentFolderIdAndPath(): { id: number; path: string } | null {
- const current = getCurrentFolderId.get() as { current_folderId: number | null } | null;
- if (!current?.current_folderId) return null;
+ const current = getCurrentFolderId.get() as { current_folder_id: number | null } | null;
+ if (!current?.current_folder_id) return null;
 
- const row = getFolderPathById.get(current.current_folderId) as { path: string} | null;
+ const row = getFolderPathById.get(current.current_folder_id) as { path: string} | null;
  if (!row) return null;
 
- return { id: current.current_folderId, path: row.path };
+ return { id: current.current_folder_id, path: row.path };
 }
 
 export function getFolderHistory(): Array<{ id: number; path: string; added_at: string }> {
@@ -274,8 +354,8 @@ export function getNextFolder(): { id: number; path: string } | null {
   const history = getFolderHistory();
   if (history.length === 0) return null;
 
-  const current = getCurrentFolderId.get() as { current_folderId: number | null } | null;
-  const currentId = current?.current_folderId ?? null;
+  const current = getCurrentFolderId.get() as { current_folder_id: number | null } | null;
+  const currentId = current?.current_folder_id ?? null;
 
   if (currentId == null) {
     const oldest = history[history.length - 1]!;
@@ -294,8 +374,8 @@ export function getPrevFolder(): { id: number; path: string } | null {
   const history = getFolderHistory();
   if (history.length === 0) return null;
 
-  const current = getCurrentFolderId.get() as { current_folderId: number | null } | null;
-  const currentId = current?.current_folderId ?? null;
+  const current = getCurrentFolderId.get() as { current_folder_id: number | null } | null;
+  const currentId = current?.current_folder_id ?? null;
 
   if (currentId == null) {
     const newest = history[0]!;

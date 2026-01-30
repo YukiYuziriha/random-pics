@@ -6,6 +6,8 @@
 
 **RULE 3**: ALWAYS read corresponding files before discussing them.
 
+**RULE 3**: NEVER run server yourself. You should run 'bun tsc' after code changes.
+
 **RULE 6**: User is programming manually. AI is for information retrieval only.
 
 **RULE 8**: Never guess syntax, code snippets and patterns. Use subagents to search context7, tavily or other available tool to find fresh patterns.

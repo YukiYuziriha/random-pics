@@ -1,6 +1,9 @@
+import { mkdirSync } from "node:fs";
+import { dirname } from "node:path";
 import { Database } from "bun:sqlite";
 
 const dbPath = Bun.resolveSync("../data/imgstate.sqlite", import.meta.dir);
+mkdirSync(dirname(dbPath), { recursive: true });
 export const db = new Database(dbPath, { create: true, readwrite: true });
 
 db.run(`
@@ -17,8 +20,7 @@ db.run(`
   );
   CREATE TABLE IF NOT EXISTS state (
     id INTEGER PRIMARY KEY CHECK (id = 1),
-    current_index INTEGER NOT NULL DEFAULT 0,
-    current_random_index INTEGER NOT NULL DEFAULT -1,
+    current_index INTEGER NOT NULL DEFAULT -1,
     current_folder_id INTEGER
   );
   CREATE TABLE IF NOT EXISTS random_history (
@@ -26,7 +28,7 @@ db.run(`
     image_id INTEGER NOT NULL,
     FOREIGN KEY (image_id) REFERENCES images(id)
   );
-  CREATE TABLE IF NOT EXISTS random_lap (
+  CREATE TABLE IF NOT EXISTS current_lap (
     image_id INTEGER PRIMARY KEY,
     FOREIGN KEY (image_id) REFERENCES images(id)
   );
