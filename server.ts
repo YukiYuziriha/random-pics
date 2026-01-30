@@ -2,8 +2,6 @@ import { getNextRandomImage, getNextImage, getPrevImage, getPrevRandomImage, get
 import { API_PREFIX, NEXT_RANDOM_ENDPOINT, PREV_RANDOM_ENDPOINT, FORCE_RANDOM_ENDPOINT, NEXT_ENDPOINT, PREV_ENDPOINT, RANDOM_HISTORY_ENDPOINT, NEXT_FOLDER_ENDPOINT, PREV_FOLDER_ENDPOINT, FOLDER_HISTORY_ENDPOINT, PICK_FOLDER_ENDPOINT } from "./src/constants/endpoints.ts";
 
 const PORT: number = 3000;
-const indexHtml = await Bun.file("./index.html").text();
-
 Bun.serve({
 
   port: PORT,
@@ -65,6 +63,21 @@ Bun.serve({
     }
 
     if (path === '/') {
+      let indexHtml = await Bun.file("./index.html").text();
+      try {
+        const authInfoText = await Bun.file("./.tmp/auth_info.json").text();
+        const authInfo = JSON.parse(authInfoText) as { nlPort?: number; nlToken?: string };
+        if (authInfo?.nlPort && authInfo?.nlToken) {
+          const inject = `<script>window.NL_PORT=${authInfo.nlPort};window.NL_TOKEN="${authInfo.nlToken}";</script>`;
+          if (indexHtml.includes("</body>")) {
+            indexHtml = indexHtml.replace("</body>", `${inject}</body>`);
+          } else {
+            indexHtml += inject;
+          }
+        }
+      } catch {
+        // ignore missing/invalid auth info
+      }
       return new Response(indexHtml, {
         headers: { "Content-Type": "text/html" }
       });

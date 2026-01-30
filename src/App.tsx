@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { NEXT_RANDOM_ENDPOINT, PREV_RANDOM_ENDPOINT, FORCE_RANDOM_ENDPOINT, NEXT_ENDPOINT, PREV_ENDPOINT, RANDOM_HISTORY_ENDPOINT } from "./constants/endpoints.ts";
+import { useEffect, useState } from 'react';
+import { NEXT_RANDOM_ENDPOINT, PREV_RANDOM_ENDPOINT, FORCE_RANDOM_ENDPOINT, NEXT_ENDPOINT, PREV_ENDPOINT, RANDOM_HISTORY_ENDPOINT, FOLDER_HISTORY_ENDPOINT, PICK_FOLDER_ENDPOINT } from "./constants/endpoints.ts";
 
 
 function ForceRandomButton({ onLoadImage }: { onLoadImage: () => void }) {
@@ -42,10 +42,20 @@ function PrevRandomButton({ onLoadImage }: { onLoadImage: () => void }) {
   )
 }
 
+function PickFolderButton({ onPick }: { onPick: () => void }) {
+  return (
+    <button onClick={onPick}>
+      pick-folder
+    </button>
+  );
+} 
+
 export default function App() {
   const [imageSrc, setImageSrc] = useState('');
   const [history, setHistory] = useState<string[]>([]);
   const [historyIndex, setHistoryIndex] = useState(-1);
+  const [folderHistory, setFolderHistory] = useState<string[]>([]);
+  const [folderHistoryIndex, setFolderHistoryIndex] = useState(-1)
 
   const loadHistory = async () => {
     const res = await fetch(`/api/${RANDOM_HISTORY_ENDPOINT}`)
@@ -60,6 +70,44 @@ export default function App() {
     const url = URL.createObjectURL(blob)
     setImageSrc(url)
   } 
+  
+  const loadFolderHistory = async () => {
+    const res = await fetch(`/api/${FOLDER_HISTORY_ENDPOINT}`);
+    const data = await res.json();
+    setFolderHistory(data.history);
+    setFolderHistoryIndex(data.currentIndex);
+  };
+
+  const handlePickFolder = async (): Promise<boolean> => {
+    const folderPath = await Neutralino.os.showFolderDialog("Pick folder", {});
+    if (!folderPath) return false;
+
+    await fetch(`/api/${PICK_FOLDER_ENDPOINT}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ path: folderPath }),
+    });
+
+    await loadFolderHistory();
+    return true;
+  };
+
+  const ensureFolderSelected = async (): Promise<boolean> => {
+    if (folderHistoryIndex >= 0) return true;
+    return handlePickFolder();
+  };
+
+  const guardedLoadImage = async (endpoint: string, refreshHistory: boolean): Promise<void> => {
+    if (!(await ensureFolderSelected())) return;
+    await handleLoadImage(endpoint);
+    if (refreshHistory) {
+      await loadHistory();
+    }
+  };
+
+  useEffect(() => {
+    void loadFolderHistory();
+  }, []);
 
   const historyVisualSize = 51;
   const half = Math.floor(historyVisualSize / 2);
@@ -134,23 +182,22 @@ export default function App() {
           alignItems: 'center',
         }}
       >
-        <PrevButton onLoadImage={() => handleLoadImage(PREV_ENDPOINT)} />
+        <PickFolderButton onPick={async () => { await handlePickFolder(); }} />
+
+        <PrevButton onLoadImage={() => guardedLoadImage(PREV_ENDPOINT, true)} />
         
-        <NextButton onLoadImage={() => handleLoadImage(NEXT_ENDPOINT)} />
+        <NextButton onLoadImage={() => guardedLoadImage(NEXT_ENDPOINT, true)} />
         
         <PrevRandomButton onLoadImage={ async () => {
-          await handleLoadImage(PREV_RANDOM_ENDPOINT)
-          await loadHistory();
+          await guardedLoadImage(PREV_RANDOM_ENDPOINT, true);
         }} />          
 
         <ForceRandomButton onLoadImage={ async () => { 
-          await handleLoadImage(FORCE_RANDOM_ENDPOINT);
-          await loadHistory();
+          await guardedLoadImage(FORCE_RANDOM_ENDPOINT, true);
         }} />
         
         <NextRandomButton onLoadImage={ async () => { 
-          await handleLoadImage(NEXT_RANDOM_ENDPOINT);
-          await loadHistory();
+          await guardedLoadImage(NEXT_RANDOM_ENDPOINT, true);
         }} />
       </div>
     </div>
