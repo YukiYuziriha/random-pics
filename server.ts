@@ -1,7 +1,7 @@
-import { getNextRandomImage, getNextImage, getPrevImage, getPrevRandomImage, getForceRandomImage, getRandomHistoryAndPointer } from "./src/imgLoader.ts";
-import { NEXT_RANDOM_ENDPOINT, PREV_RANDOM_ENDPOINT, FORCE_RANDOM_ENDPOINT, NEXT_ENDPOINT, PREV_ENDPOINT, RANDOM_HISTORY_ENDPOINT } from "./src/constants/endpoints.ts";
+import { getNextRandomImage, getNextImage, getPrevImage, getPrevRandomImage, getForceRandomImage, getRandomHistoryAndPointer, getNextFolder, getPrevFolder, getCurrentFolderIdAndPath, getFolderHistory } from "./src/imgLoader.ts";
+import { API_PREFIX, NEXT_RANDOM_ENDPOINT, PREV_RANDOM_ENDPOINT, FORCE_RANDOM_ENDPOINT, NEXT_ENDPOINT, PREV_ENDPOINT, RANDOM_HISTORY_ENDPOINT, NEXT_FOLDER_ENDPOINT } from "./src/constants/endpoints.ts";
 
-const PORT: number = 3000
+const PORT: number = 3000;
 const indexHtml = await Bun.file("./index.html").text();
 
 Bun.serve({
@@ -12,44 +12,54 @@ Bun.serve({
     const url = new URL(req.url);
     const path = url.pathname;
 
-    if (req.url.endsWith(`/api/${NEXT_RANDOM_ENDPOINT}`)) {
+    if (req.url.endsWith(`${API_PREFIX}${NEXT_RANDOM_ENDPOINT}`)) {
       const imageBuffer = await getNextRandomImage();
       return new Response(imageBuffer, {
         headers: { "Content-Type": "image/jpeg" }
       });
     }
 
-    if (req.url.endsWith(`/api/${PREV_RANDOM_ENDPOINT}`)) {
+    if (req.url.endsWith(`${API_PREFIX}${PREV_RANDOM_ENDPOINT}`)) {
       const imageBuffer = await getPrevRandomImage();
       return new Response(imageBuffer, {
         headers: { "Content-Type": "image/jpeg" }
       });
     }
 
-    if (req.url.endsWith(`/api/${FORCE_RANDOM_ENDPOINT}`)) {
+    if (req.url.endsWith(`${API_PREFIX}${FORCE_RANDOM_ENDPOINT}`)) {
       const imageBuffer = await getForceRandomImage();
       return new Response(imageBuffer, {
         headers: { "Content-Type": "image/jpeg" }
       });
     }
 
-    if (req.url.endsWith(`/api/${NEXT_ENDPOINT}`)) {
+    if (req.url.endsWith(`${API_PREFIX}${NEXT_ENDPOINT}`)) {
       const imageBuffer = await getNextImage();
       return new Response(imageBuffer, {
         headers: { "Content-Type": "image/jpeg" }
       });
     }
 
-    if (req.url.endsWith(`/api/${PREV_ENDPOINT}`)) {
+    if (req.url.endsWith(`${API_PREFIX}${PREV_ENDPOINT}`)) {
       const imageBuffer = await getPrevImage();
       return new Response(imageBuffer, {
         headers: { "Content-Type": "image/jpeg" }
       });
     }
 
-    if (req.url.endsWith(`/api/${RANDOM_HISTORY_ENDPOINT}`)) {
+    if (req.url.endsWith(`${API_PREFIX}${RANDOM_HISTORY_ENDPOINT}`)) {
       const history = getRandomHistoryAndPointer();
       return new Response(JSON.stringify(history), {
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+
+    if (req.url.endsWith(`${API_PREFIX}${NEXT_FOLDER_ENDPOINT}`)) {
+      const folder = getNextFolder();
+      if (!folder) {
+        return new Response("no bitches", { status: 404 });
+      }
+      return new Response(JSON.stringify(folder), {
         headers: { "Content-Type": "application/json" },
       });
     }
