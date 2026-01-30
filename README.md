@@ -20,6 +20,7 @@ gesture drawing, timed reference slideshow.
 can randomly serve pictures. 
 no timer yet, can load next/prev image in random/normal order. history of random/normal order/folders preserves forever.
 can wipe everything.
+has persistent toggles: vertical mirror, horizontal mirror, greyscale.
 
 ## next milestones
 - timer
