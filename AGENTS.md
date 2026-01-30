@@ -6,7 +6,9 @@
 
 **RULE 3**: ALWAYS read corresponding files before discussing them.
 
-**RULE 3**: NEVER run server yourself. You should run 'bun tsc' after code changes.
+**RULE 4**: NEVER run server yourself. You should run 'bun tsc' after code changes.
+
+**RULE 5**: if you change db.ts, change initialization and delete db file to recreate it.
 
 **RULE 6**: User is programming manually. AI is for information retrieval only.
 
