@@ -24,7 +24,10 @@ db.run(`
     id INTEGER PRIMARY KEY CHECK (id = 1),
     current_index INTEGER NOT NULL DEFAULT -1,
     current_random_index INTEGER NOT NULL DEFAULT -1,
-    current_folder_id INTEGER
+    current_folder_id INTEGER,
+    vertical_mirror INTEGER NOT NULL DEFAULT 0,
+    horizontal_mirror INTEGER NOT NULL DEFAULT 0,
+    greyscale INTEGER NOT NULL DEFAULT 0
   );
   CREATE TABLE IF NOT EXISTS random_history (
     folder_id INTEGER NOT NULL,

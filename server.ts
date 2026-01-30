@@ -1,5 +1,5 @@
-import { getNextRandomImage, getNextImage, getPrevImage, getPrevRandomImage, getForceRandomImage, getCurrentImageOrFirst, getRandomHistoryAndPointer, getNormalHistoryAndPointer, getNextFolder, getPrevFolder, getCurrentFolderIdAndPath, getFolderHistory, setCurrentFolderAndIndexIt, reindexCurrentFolder, resetRandomHistory, resetNormalHistory, fullWipe } from "./src/imgLoader.ts";
-import { API_PREFIX, NEXT_RANDOM_ENDPOINT, PREV_RANDOM_ENDPOINT, FORCE_RANDOM_ENDPOINT, NEXT_ENDPOINT, PREV_ENDPOINT, CURRENT_IMAGE_ENDPOINT, RANDOM_HISTORY_ENDPOINT, NORMAL_HISTORY_ENDPOINT, NEXT_FOLDER_ENDPOINT, PREV_FOLDER_ENDPOINT, FOLDER_HISTORY_ENDPOINT, PICK_FOLDER_ENDPOINT, REINDEX_CURRENT_FOLDER_ENDPOINT, RESET_RANDOM_HISTORY_ENDPOINT, RESET_NORMAL_HISTORY_ENDPOINT, FULL_WIPE_ENDPOINT } from "./src/constants/endpoints.ts";
+import { getNextRandomImage, getNextImage, getPrevImage, getPrevRandomImage, getForceRandomImage, getCurrentImageOrFirst, getRandomHistoryAndPointer, getNormalHistoryAndPointer, getNextFolder, getPrevFolder, getCurrentFolderIdAndPath, getFolderHistory, setCurrentFolderAndIndexIt, reindexCurrentFolder, resetRandomHistory, resetNormalHistory, fullWipe, getImageState, setImageState } from "./src/imgLoader.ts";
+import { API_PREFIX, NEXT_RANDOM_ENDPOINT, PREV_RANDOM_ENDPOINT, FORCE_RANDOM_ENDPOINT, NEXT_ENDPOINT, PREV_ENDPOINT, CURRENT_IMAGE_ENDPOINT, RANDOM_HISTORY_ENDPOINT, NORMAL_HISTORY_ENDPOINT, NEXT_FOLDER_ENDPOINT, PREV_FOLDER_ENDPOINT, FOLDER_HISTORY_ENDPOINT, PICK_FOLDER_ENDPOINT, REINDEX_CURRENT_FOLDER_ENDPOINT, RESET_RANDOM_HISTORY_ENDPOINT, RESET_NORMAL_HISTORY_ENDPOINT, FULL_WIPE_ENDPOINT, STATE_ENDPOINT } from "./src/constants/endpoints.ts";
 
 const PORT: number = 3000;
 Bun.serve({
@@ -160,6 +160,25 @@ Bun.serve({
     if (req.method === "POST" && req.url.endsWith(`${API_PREFIX}${FULL_WIPE_ENDPOINT}`)) {
       fullWipe();
       return new Response(JSON.stringify({ ok: true }), {
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+
+    if (req.url.endsWith(`${API_PREFIX}${STATE_ENDPOINT}`)) {
+      if (req.method === "POST") {
+        const body = await req.json();
+        setImageState({
+          verticalMirror: Boolean(body?.verticalMirror),
+          horizontalMirror: Boolean(body?.horizontalMirror),
+          greyscale: Boolean(body?.greyscale),
+        });
+        return new Response(JSON.stringify({ ok: true }), {
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+
+      const state = getImageState();
+      return new Response(JSON.stringify(state), {
         headers: { "Content-Type": "application/json" },
       });
     }

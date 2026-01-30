@@ -103,6 +103,18 @@ const deleteImagesByFolderId = db.query(`
                                          DELETE FROM images
                                          WHERE folder_id = ?
                                          `);
+const getStateQuery = db.query(`
+                                SELECT vertical_mirror, horizontal_mirror, greyscale
+                                FROM state
+                                WHERE id = 1
+                                `);
+const setStateQuery = db.query(`
+                                UPDATE state
+                                SET vertical_mirror = $verticalMirror,
+                                    horizontal_mirror = $horizontalMirror,
+                                    greyscale = $greyscale
+                                WHERE id = 1
+                                `);
 
 function randomHistoryShiftUpSafe(folderId: number): void {
   db.run("BEGIN");
@@ -385,6 +397,23 @@ export function resetNormalHistory(): void {
   const current = getCurrentFolderIdAndPath();
   if (!current) return;
   setCurrentNormalHistoryIndex(current.id, -1);
+}
+
+export function getImageState(): { verticalMirror: boolean; horizontalMirror: boolean; greyscale: boolean } {
+  const row = getStateQuery.get() as { vertical_mirror: number; horizontal_mirror: number; greyscale: number } | null;
+  return {
+    verticalMirror: Boolean(row?.vertical_mirror ?? 0),
+    horizontalMirror: Boolean(row?.horizontal_mirror ?? 0),
+    greyscale: Boolean(row?.greyscale ?? 0),
+  };
+}
+
+export function setImageState(state: { verticalMirror: boolean; horizontalMirror: boolean; greyscale: boolean }): void {
+  setStateQuery.run({
+    $verticalMirror: state.verticalMirror ? 1 : 0,
+    $horizontalMirror: state.horizontalMirror ? 1 : 0,
+    $greyscale: state.greyscale ? 1 : 0,
+  });
 }
 
 export function fullWipe(): void {

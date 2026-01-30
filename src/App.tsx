@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { NEXT_RANDOM_ENDPOINT, PREV_RANDOM_ENDPOINT, FORCE_RANDOM_ENDPOINT, NEXT_ENDPOINT, PREV_ENDPOINT, CURRENT_IMAGE_ENDPOINT, RANDOM_HISTORY_ENDPOINT, NORMAL_HISTORY_ENDPOINT, FOLDER_HISTORY_ENDPOINT, PICK_FOLDER_ENDPOINT, NEXT_FOLDER_ENDPOINT, PREV_FOLDER_ENDPOINT, REINDEX_CURRENT_FOLDER_ENDPOINT, RESET_RANDOM_HISTORY_ENDPOINT, RESET_NORMAL_HISTORY_ENDPOINT, FULL_WIPE_ENDPOINT } from "./constants/endpoints.ts";
+import { NEXT_RANDOM_ENDPOINT, PREV_RANDOM_ENDPOINT, FORCE_RANDOM_ENDPOINT, NEXT_ENDPOINT, PREV_ENDPOINT, CURRENT_IMAGE_ENDPOINT, RANDOM_HISTORY_ENDPOINT, NORMAL_HISTORY_ENDPOINT, FOLDER_HISTORY_ENDPOINT, PICK_FOLDER_ENDPOINT, NEXT_FOLDER_ENDPOINT, PREV_FOLDER_ENDPOINT, REINDEX_CURRENT_FOLDER_ENDPOINT, RESET_RANDOM_HISTORY_ENDPOINT, RESET_NORMAL_HISTORY_ENDPOINT, FULL_WIPE_ENDPOINT, STATE_ENDPOINT } from "./constants/endpoints.ts";
 
 
 function ForceRandomButton({ onLoadImage }: { onLoadImage: () => void }) {
@@ -104,6 +104,9 @@ export default function App() {
   const [historyIndex, setHistoryIndex] = useState(-1);
   const [folderHistory, setFolderHistory] = useState<string[]>([]);
   const [folderHistoryIndex, setFolderHistoryIndex] = useState(-1)
+  const [verticalMirror, setVerticalMirror] = useState(false);
+  const [horizontalMirror, setHorizontalMirror] = useState(false);
+  const [greyscale, setGreyscale] = useState(false);
 
   const loadHistory = async (endpoint: string) => {
     const res = await fetch(`/api/${endpoint}`)
@@ -124,6 +127,22 @@ export default function App() {
     const data = await res.json();
     setFolderHistory(data.history);
     setFolderHistoryIndex(data.currentIndex);
+  };
+
+  const loadImageState = async () => {
+    const res = await fetch(`/api/${STATE_ENDPOINT}`);
+    const data = await res.json();
+    setVerticalMirror(Boolean(data.verticalMirror));
+    setHorizontalMirror(Boolean(data.horizontalMirror));
+    setGreyscale(Boolean(data.greyscale));
+  };
+
+  const persistImageState = async (state: { verticalMirror: boolean; horizontalMirror: boolean; greyscale: boolean }) => {
+    await fetch(`/api/${STATE_ENDPOINT}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(state),
+    });
   };
 
   const handlePickFolder = async (): Promise<boolean> => {
@@ -149,6 +168,7 @@ export default function App() {
 
   useEffect(() => {
     void loadFolderHistory();
+    void loadImageState();
   }, []);
 
   const historyVisualSize = 31;
@@ -303,6 +323,8 @@ export default function App() {
             maxWidth: '100%', 
             maxHeight: '100%', 
             objectFit: 'contain',
+            transform: `${horizontalMirror ? "scaleX(-1)" : ""} ${verticalMirror ? "scaleY(-1)" : ""}`.trim() || "none",
+            filter: greyscale ? "grayscale(1)" : "none",
           }}
           alt="loaded image"
         />}
@@ -355,6 +377,30 @@ export default function App() {
           await fetch(`/api/${RESET_NORMAL_HISTORY_ENDPOINT}`, { method: "POST" });
           await loadHistory(NORMAL_HISTORY_ENDPOINT);
         }} />
+
+        <button onClick={async () => {
+          const next = !verticalMirror;
+          setVerticalMirror(next);
+          await persistImageState({ verticalMirror: next, horizontalMirror, greyscale });
+        }}>
+          vertical-mirror
+        </button>
+
+        <button onClick={async () => {
+          const next = !horizontalMirror;
+          setHorizontalMirror(next);
+          await persistImageState({ verticalMirror, horizontalMirror: next, greyscale });
+        }}>
+          horizontal-mirror
+        </button>
+
+        <button onClick={async () => {
+          const next = !greyscale;
+          setGreyscale(next);
+          await persistImageState({ verticalMirror, horizontalMirror, greyscale: next });
+        }}>
+          greyscale
+        </button>
       </div>
     </div>
     <div

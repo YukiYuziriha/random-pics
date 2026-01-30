@@ -15,3 +15,4 @@ export const REINDEX_CURRENT_FOLDER_ENDPOINT = "reindex_current_folder";
 export const RESET_RANDOM_HISTORY_ENDPOINT = "reset_random_history";
 export const RESET_NORMAL_HISTORY_ENDPOINT = "reset_normal_history";
 export const FULL_WIPE_ENDPOINT = "full_wipe";
+export const STATE_ENDPOINT = "state";
