@@ -1,16 +1,28 @@
-const SECOND: number = 1_000;
+const ONE_SECOND: number = 1_000;
 
-export function timer(countdown: number, second: number = SECOND): void  {
-  let n = countdown;
+export function timer(
+  seconds: number, 
+  everySecond?: (remaining: number) => void, 
+  whenDone?: () => void
+): () => void  {
+
+  let n = seconds;
+
+  everySecond?.(n);
   console.log(n);
+
   const interval1 = setInterval(() => {
-    console.log(--n);
+    n = n - 1;
+    console.log(n);
+
     if (n <= 0) {
       clearInterval(interval1);
+      whenDone?.();
       console.log("over");
-      return true
     }
-  }, second);
+  }, ONE_SECOND);
+
+  return () => clearInterval(interval1);
 }
 
-console.log(timer(7));
+const stop = timer(7);
