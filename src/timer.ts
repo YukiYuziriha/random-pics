@@ -13,6 +13,8 @@ export function timer(
 
   const interval1 = setInterval(() => {
     n = n - 1;
+
+    everySecond?.(n);
     console.log(n);
 
     if (n <= 0) {
@@ -25,4 +27,3 @@ export function timer(
   return () => clearInterval(interval1);
 }
 
-const stop = timer(7);
