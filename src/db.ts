@@ -2,7 +2,10 @@ import { mkdirSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { Database } from "bun:sqlite";
 
-const dbPath = resolve(import.meta.dir, "../data/imgstate.sqlite");
+const runtimeDataDir = process.env.RANDOM_PICS_DATA_DIR;
+const dbPath = runtimeDataDir
+  ? resolve(runtimeDataDir, "imgstate.sqlite")
+  : resolve(import.meta.dir, "../data/imgstate.sqlite");
 mkdirSync(dirname(dbPath), { recursive: true });
 export const db = new Database(dbPath, { create: true, readwrite: true });
 

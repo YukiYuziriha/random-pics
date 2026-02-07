@@ -14,7 +14,7 @@
   },
   "scripts": {
     "build": "bun build ./src/main.tsx --outdir ./dist --minify",
-    "build:tauri": "bun build ./src/main.tsx --outdir ./dist-tauri --minify && cp ./index.tauri.html ./dist-tauri/index.html",
+    "build:tauri": "bun build ./src/main.tsx --outdir ./dist-tauri --minify && cp ./index.tauri.html ./dist-tauri/index.html && bun build ./server.ts --compile --outfile ./dist-tauri/server",
     "build:watch": "bun build ./src/main.tsx --outdir ./dist --minify --watch",
     "dev": "bun run build:watch & bun ./server.ts & wait"
   }

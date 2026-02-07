@@ -13,6 +13,7 @@
     "windows": [
       {
         "title": "Random Pics",
+        "url": "http://127.0.0.1:3000",
         "width": 800,
         "height": 500,
         "minWidth": 400,
@@ -28,6 +29,11 @@
   "bundle": {
     "active": true,
     "targets": "all",
+    "resources": [
+      "../index.html",
+      "../dist",
+      "../dist-tauri/server"
+    ],
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
