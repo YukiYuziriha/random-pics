@@ -23,6 +23,18 @@ import { FolderControls } from './components/FolderControls.tsx';
 import { HistoryPanel } from './components/HistoryPanel.tsx';
 import { ImageControls } from './components/ImageControls.tsx';
 
+const INITIAL_TIMER_STORAGE_KEY = 'timer.initial_seconds';
+const REMAINING_TIMER_STORAGE_KEY = 'timer.remaining_seconds';
+
+function readPersistedSeconds(key: string, fallback: number): number {
+  const raw = globalThis.localStorage?.getItem(key);
+  if (!raw) return fallback;
+
+  const parsed = Number(raw);
+  if (!Number.isFinite(parsed)) return fallback;
+  return Math.max(1, Math.floor(parsed));
+}
+
 export default function App() {
   const [imageSrc, setImageSrc] = useState('');
   const [history, setHistory] = useState<string[]>([]);
@@ -32,8 +44,12 @@ export default function App() {
   const [verticalMirror, setVerticalMirror] = useState(false);
   const [horizontalMirror, setHorizontalMirror] = useState(false);
   const [greyscale, setGreyscale] = useState(false);
-  const [remaining, setRemaining] = useState(10);
+  const [initialTimerSeconds, setInitialTimerSeconds] = useState(() => readPersistedSeconds(INITIAL_TIMER_STORAGE_KEY, 10));
+  const [remainingTimerSeconds, setRemainingTimerSeconds] = useState(() => readPersistedSeconds(REMAINING_TIMER_STORAGE_KEY, 10));
+  const [isTimerRunning, setIsTimerRunning] = useState(false);
   const stopTimerRef = useRef<null | (() => void)>(null);
+  const timerLoopActiveRef = useRef(false);
+  const timerLoopStartSecondsRef = useRef(10);
 
   const loadHistory = async (endpoint: string) => {
     const res = await fetch(`/api/${endpoint}`);
@@ -49,11 +65,12 @@ export default function App() {
     setImageSrc(url);
   };
 
-  const loadFolderHistory = async () => {
+  const loadFolderHistory = async (): Promise<{ history: string[]; currentIndex: number }> => {
     const res = await fetch(`/api/${FOLDER_HISTORY_ENDPOINT}`);
     const data = await res.json();
     setFolderHistory(data.history);
     setFolderHistoryIndex(data.currentIndex);
+    return data;
   };
 
   const loadImageState = async () => {
@@ -94,12 +111,32 @@ export default function App() {
   };
 
   useEffect(() => {
-    void loadFolderHistory();
-    void loadImageState();
+    const initialize = async () => {
+      const folderData = await loadFolderHistory();
+      await loadImageState();
+
+      if (folderData.currentIndex >= 0) {
+        await handleLoadImage(CURRENT_IMAGE_ENDPOINT);
+        await loadHistory(NORMAL_HISTORY_ENDPOINT);
+      }
+    };
+
+    void initialize();
+
     return () => {
+      timerLoopActiveRef.current = false;
       stopTimerRef.current?.();
+      stopTimerRef.current = null;
     };
   }, []);
+
+  useEffect(() => {
+    globalThis.localStorage?.setItem(INITIAL_TIMER_STORAGE_KEY, String(initialTimerSeconds));
+  }, [initialTimerSeconds]);
+
+  useEffect(() => {
+    globalThis.localStorage?.setItem(REMAINING_TIMER_STORAGE_KEY, String(remainingTimerSeconds));
+  }, [remainingTimerSeconds]);
 
   const historyVisualSize = 31;
   const half = Math.floor(historyVisualSize / 2);
@@ -211,15 +248,86 @@ export default function App() {
     await persistImageState({ verticalMirror, horizontalMirror, greyscale: next });
   };
 
-  const handleStartTimer = () => {
+  const sanitizeSeconds = (seconds: number): number => {
+    if (Number.isNaN(seconds)) return 1;
+    return Math.max(1, Math.floor(seconds));
+  };
+
+  const clearActiveTimer = () => {
     stopTimerRef.current?.();
+    stopTimerRef.current = null;
+  };
+
+  const startTimerCycle = (seconds: number) => {
+    const startAt = sanitizeSeconds(seconds);
+    setIsTimerRunning(true);
     stopTimerRef.current = timer(
-      10,
-      (n) => setRemaining(n),
+      startAt,
+      (n) => setRemainingTimerSeconds(n),
       () => {
+        if (!timerLoopActiveRef.current) {
+          setIsTimerRunning(false);
+          stopTimerRef.current = null;
+          return;
+        }
+
         void loadForceRandomImage();
+        const restartAt = sanitizeSeconds(timerLoopStartSecondsRef.current);
+        setRemainingTimerSeconds(restartAt);
+        startTimerCycle(restartAt);
       }
     );
+  };
+
+  const handleInitialTimerSecondsChange = (seconds: number) => {
+    if (Number.isNaN(seconds)) return;
+    const next = sanitizeSeconds(seconds);
+    setInitialTimerSeconds(next);
+    timerLoopStartSecondsRef.current = next;
+    if (!isTimerRunning) {
+      setRemainingTimerSeconds(next);
+    }
+  };
+
+  const handleRemainingTimerSecondsChange = (seconds: number) => {
+    if (Number.isNaN(seconds)) return;
+    const next = sanitizeSeconds(seconds);
+    setRemainingTimerSeconds(next);
+    if (isTimerRunning) {
+      clearActiveTimer();
+      startTimerCycle(next);
+    }
+  };
+
+  const handleToggleStartStop = () => {
+    if (isTimerRunning) {
+      timerLoopActiveRef.current = false;
+      clearActiveTimer();
+      setIsTimerRunning(false);
+      const resetTo = sanitizeSeconds(timerLoopStartSecondsRef.current);
+      setRemainingTimerSeconds(resetTo);
+      return;
+    }
+
+    const startAt = sanitizeSeconds(initialTimerSeconds);
+    timerLoopStartSecondsRef.current = startAt;
+    timerLoopActiveRef.current = true;
+    setRemainingTimerSeconds(startAt);
+    clearActiveTimer();
+    startTimerCycle(startAt);
+  };
+
+  const handleTogglePausePlay = () => {
+    if (isTimerRunning) {
+      clearActiveTimer();
+      setIsTimerRunning(false);
+      return;
+    }
+
+    const restartAt = sanitizeSeconds(remainingTimerSeconds);
+    timerLoopActiveRef.current = true;
+    setRemainingTimerSeconds(restartAt);
+    startTimerCycle(restartAt);
   };
 
   return (
@@ -250,7 +358,8 @@ export default function App() {
         data-testid="image-and-buttons"
         style={{
           display: 'flex',
-          height: '100vh',
+          height: '100%',
+          minHeight: 0,
           flexDirection: 'column',
           justifyContent: 'center',
           alignItems: 'center',
@@ -306,8 +415,13 @@ export default function App() {
           onToggleVerticalMirror={handleToggleVerticalMirror}
           onToggleHorizontalMirror={handleToggleHorizontalMirror}
           onToggleGreyscale={handleToggleGreyscale}
-          onStartTimer={handleStartTimer}
-          remaining={remaining}
+          onToggleStartStop={handleToggleStartStop}
+          onTogglePausePlay={handleTogglePausePlay}
+          onInitialSecondsChange={handleInitialTimerSecondsChange}
+          onRemainingSecondsChange={handleRemainingTimerSecondsChange}
+          initialSeconds={initialTimerSeconds}
+          remainingSeconds={remainingTimerSeconds}
+          isRunning={isTimerRunning}
         />
       </div>
 
