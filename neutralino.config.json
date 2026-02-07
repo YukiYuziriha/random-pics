@@ -47,7 +47,7 @@
       "maximize": false,
       "hidden": false,
       "resizable": true,
-      "exitProcessOnClose": false,
+      "exitProcessOnClose": true,
       "injectGlobals": true,
       "injectClientLibrary": true
     },
@@ -86,8 +86,7 @@
       "patchFile": "/index.html",
       "devUrl": "http://localhost:3000",
       "projectPath": "/",
-      "devCommand": "bun server.ts",
-      "buildCommand": "bun build:watch"
+      "devCommand": "bun server.ts"
     }
   }
 }
