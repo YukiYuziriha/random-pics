@@ -25,6 +25,8 @@ export function HistoryPanel({
         justifyContent: 'center',
         alignItems: 'stretch',
         overflow: 'hidden',
+        background: '#1f2335',
+        border: '1px solid #414868',
       }}
     >
       <div
@@ -50,11 +52,11 @@ export function HistoryPanel({
                 whiteSpace: 'nowrap',
                 overflow: 'hidden',
                 textOverflow: 'ellipsis',
-                color: item ? (isCurrent ? '#fff' : '#a0a0a0') : 'transparent',
-                background: isCurrent ? '#3b2f1f' : 'transparent',
+                color: item ? (isCurrent ? '#c0caf5' : '#a9b1d6') : 'transparent',
+                background: isCurrent ? '#2f334d' : 'transparent',
                 fontWeight: isCurrent ? 700 : 400,
                 fontFamily: 'monospace',
-                borderRadius: '4px',
+                borderRadius: '2px',
               }}
             >
               {item ? item.split('/').pop() : 'placeholder'}

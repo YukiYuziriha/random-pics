@@ -37,6 +37,11 @@ export function ImageControls({
         display: 'flex',
         marginTop: 'auto',
         alignItems: 'center',
+        gap: '6px',
+        flexWrap: 'wrap',
+        padding: '8px',
+        border: '1px solid #414868',
+        background: '#1f2335',
       }}
     >
       <ActionButton label="prev" onClick={onPrev} />

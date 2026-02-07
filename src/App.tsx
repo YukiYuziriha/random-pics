@@ -227,13 +227,15 @@ export default function App() {
       data-testid="app-panel"
       style={{
         height: '100vh',
-        border: '3px solid #615532',
+        border: '1px solid #3b4261',
         gap: '10px',
-        background: '#21294a',
+        background: '#1a1b26',
+        color: '#c0caf5',
         flexDirection: 'row',
         display: 'flex',
         justifyContent: 'space-between',
         overflow: 'hidden',
+        padding: '10px',
       }}
     >
       <HistoryPanel
@@ -252,6 +254,7 @@ export default function App() {
           flexDirection: 'column',
           justifyContent: 'center',
           alignItems: 'center',
+          gap: '10px',
         }}
       >
         <FolderControls
@@ -272,6 +275,9 @@ export default function App() {
             justifyContent: 'center',
             overflow: 'hidden',
             alignItems: 'center',
+            width: '56vw',
+            background: '#1f2335',
+            border: '1px solid #414868',
           }}
         >
           {imageSrc && (
