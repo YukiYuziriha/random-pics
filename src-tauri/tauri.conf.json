@@ -1,0 +1,39 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "random-pics",
+  "version": "0.1.0",
+  "identifier": "com.randompics.app",
+  "build": {
+    "frontendDist": "../dist-tauri",
+    "devUrl": "http://localhost:3000",
+    "beforeDevCommand": "./dev.sh",
+    "beforeBuildCommand": "bun run build:tauri"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "Random Pics",
+        "width": 800,
+        "height": 500,
+        "minWidth": 400,
+        "minHeight": 200,
+        "resizable": true,
+        "fullscreen": false
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ]
+  }
+}

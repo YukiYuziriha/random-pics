@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8">
+    <title>Debug Globals</title>
+    <script src="/js/neutralino.js"></script>
+  </head>
+  <body>
+    <h1>Checking NL Globals...</h1>
+    <pre id="output">Checking...</pre>
+    <script>
+      const output = document.getElementById('output');
+      
+      function checkGlobals() {
+        const nlVars = {};
+        for (const key in window) {
+          if (key.startsWith('NL_')) {
+            nlVars[key] = window[key];
+          }
+        }
+        output.textContent = JSON.stringify(nlVars, null, 2);
+        
+        // Check specifically for TOKEN and PORT
+        if (window.NL_TOKEN === undefined) {
+          output.textContent += "\n\n*** NL_TOKEN IS UNDEFINED ***";
+        }
+        if (window.NL_PORT === undefined) {
+          output.textContent += "\n\n*** NL_PORT IS UNDEFINED ***";
+        }
+      }
+      
+      // Check before init
+      setTimeout(() => {
+        output.textContent = "BEFORE INIT:\n";
+        checkGlobals();
+      }, 100);
+      
+      Neutralino.init();
+      
+      // Check after init (before ready)
+      setTimeout(() => {
+        output.textContent += "\n\nAFTER INIT (before ready):\n";
+        checkGlobals();
+      }, 500);
+      
+      Neutralino.events.on("ready", () => {
+        output.textContent += "\n\nAFTER READY:\n";
+        checkGlobals();
+      });
+    </script>
+  </body>
+</html>

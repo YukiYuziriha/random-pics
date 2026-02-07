@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8">
+    <title>Starting...</title>
+    <script src="/js/neutralino.js"></script>
+  </head>
+  <body>
+    <div id="status">Starting backend...</div>
+    <script>
+      async function startBackendAndRedirect() {
+        const statusEl = document.getElementById('status');
+        
+        try {
+          // Start Bun server
+          const cwd = window.NL_PATH || window.NL_CWD || ".";
+          await Neutralino.os.execCommand("bun ./server.ts", {
+            background: true,
+            cwd: cwd
+          });
+          
+          statusEl.textContent = "Waiting for server...";
+          
+          // Wait for server to be ready
+          for (let i = 0; i < 30; i++) {
+            try {
+              const res = await fetch("http://127.0.0.1:3000/api/folder_history");
+              if (res.ok) {
+                // Server is ready, redirect to it
+                window.location.href = "http://localhost:3000/";
+                return;
+              }
+            } catch (e) {
+              // Server not ready yet
+            }
+            await new Promise(r => setTimeout(r, 200));
+          }
+          
+          statusEl.textContent = "Error: Server failed to start";
+        } catch (err) {
+          statusEl.textContent = "Error: " + err.message;
+        }
+      }
+      
+      Neutralino.init();
+      Neutralino.events.on("ready", startBackendAndRedirect);
+    </script>
+  </body>
+</html>

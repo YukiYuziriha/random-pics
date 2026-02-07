@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8">
+    <title>Debug NL Globals</title>
+  </head>
+  <body>
+    <h1>Neutralino Global Variables</h1>
+    <pre id="output"></pre>
+    <script src="/js/neutralino.js"></script>
+    <script>
+      const globals = {};
+      for (const key in window) {
+        if (key.startsWith('NL_')) {
+          globals[key] = window[key];
+        }
+      }
+      document.getElementById('output').textContent = JSON.stringify(globals, null, 2);
+      console.log('NL Globals:', globals);
+    </script>
+  </body>
+</html>

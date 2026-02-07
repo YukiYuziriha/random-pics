@@ -7,10 +7,15 @@
     "typescript": "^5.9.3"
   },
   "dependencies": {
+    "@tauri-apps/api": "^2.10.1",
+    "@tauri-apps/plugin-dialog": "^2.6.0",
     "react": "^19.2.3",
     "react-dom": "^19.2.3"
   },
   "scripts": {
-    "build:watch": "bun build ./src/main.tsx --outdir ./dist --minify --watch"
+    "build": "bun build ./src/main.tsx --outdir ./dist --minify",
+    "build:tauri": "bun build ./src/main.tsx --outdir ./dist-tauri --minify && cp ./index.tauri.html ./dist-tauri/index.html",
+    "build:watch": "bun build ./src/main.tsx --outdir ./dist --minify --watch",
+    "dev": "bun run build:watch & bun ./server.ts & wait"
   }
 }

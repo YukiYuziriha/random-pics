@@ -43,5 +43,7 @@
     "skipLibCheck": true,
     "allowImportingTsExtensions": true,
     "noEmit": true,
-  }
+  },
+  "include": ["src/**/*.ts", "src/**/*.tsx", "server.ts"],
+  "exclude": ["src-tauri/target/**", "dist/**", "resources/**"]
 }

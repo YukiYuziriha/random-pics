@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { open } from '@tauri-apps/plugin-dialog';
 import { timer } from './timer.ts';
 import {
   CURRENT_IMAGE_ENDPOINT,
@@ -90,8 +91,9 @@ export default function App() {
   };
 
   const handlePickFolder = async (): Promise<boolean> => {
-    const folderPath = await Neutralino.os.showFolderDialog('Pick folder', {});
-    if (!folderPath) return false;
+    const selected = await open({ directory: true });
+    if (!selected) return false;
+    const folderPath = Array.isArray(selected) ? selected[0] : selected;
 
     await fetch(`/api/${PICK_FOLDER_ENDPOINT}`, {
       method: 'POST',
