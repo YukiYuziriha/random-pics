@@ -9,22 +9,22 @@ pub fn run() {
         std::fs::create_dir_all(&app_data_dir)?;
 
         let resource_dir = app.path().resource_dir()?;
-        let server_bin_candidates = [
-          resource_dir.join("dist-tauri").join("server"),
-          resource_dir.join("_up_").join("dist-tauri").join("server"),
+        let server_dir_candidates = [
+          resource_dir.join("dist-tauri"),
+          resource_dir.join("_up_").join("dist-tauri"),
         ];
-        let server_bin = server_bin_candidates
+        let server_dir = server_dir_candidates
           .into_iter()
           .find(|path| path.exists())
-          .ok_or_else(|| std::io::Error::new(std::io::ErrorKind::NotFound, "bundled backend not found"))?;
-        let server_cwd = if resource_dir.join("_up_").exists() {
-          resource_dir.join("_up_")
-        } else {
-          resource_dir.clone()
-        };
+          .ok_or_else(|| std::io::Error::new(std::io::ErrorKind::NotFound, "bundled runtime dir not found"))?;
+        let server_bin = server_dir.join("server");
+        let index_file = server_dir.join("index.html");
+        let frontend_dir = server_dir.join("dist");
 
         let _server = std::process::Command::new(server_bin)
-          .current_dir(server_cwd)
+          .current_dir(&server_dir)
+          .env("RANDOM_PICS_INDEX_FILE", index_file)
+          .env("RANDOM_PICS_FRONTEND_DIR", frontend_dir)
           .env("RANDOM_PICS_DATA_DIR", app_data_dir)
           .spawn()?;
 

@@ -1,7 +1,10 @@
 import { getNextRandomImage, getNextImage, getPrevImage, getPrevRandomImage, getForceRandomImage, getCurrentImageOrFirst, getRandomHistoryAndPointer, getNormalHistoryAndPointer, getNextFolder, getPrevFolder, getCurrentFolderIdAndPath, getFolderHistory, setCurrentFolderAndIndexIt, reindexCurrentFolder, resetRandomHistory, resetNormalHistory, fullWipe, getImageState, setImageState } from "./src/imgLoader.ts";
 import { API_PREFIX, NEXT_RANDOM_ENDPOINT, PREV_RANDOM_ENDPOINT, FORCE_RANDOM_ENDPOINT, NEXT_ENDPOINT, PREV_ENDPOINT, CURRENT_IMAGE_ENDPOINT, RANDOM_HISTORY_ENDPOINT, NORMAL_HISTORY_ENDPOINT, NEXT_FOLDER_ENDPOINT, PREV_FOLDER_ENDPOINT, FOLDER_HISTORY_ENDPOINT, PICK_FOLDER_ENDPOINT, REINDEX_CURRENT_FOLDER_ENDPOINT, RESET_RANDOM_HISTORY_ENDPOINT, RESET_NORMAL_HISTORY_ENDPOINT, FULL_WIPE_ENDPOINT, STATE_ENDPOINT } from "./src/constants/endpoints.ts";
+import { resolve } from "node:path";
 
 const PORT: number = 3000;
+const INDEX_FILE = resolve(process.cwd(), process.env.RANDOM_PICS_INDEX_FILE ?? "./index.html");
+const FRONTEND_DIR = resolve(process.cwd(), process.env.RANDOM_PICS_FRONTEND_DIR ?? "./dist");
 Bun.serve({
 
   port: PORT,
@@ -77,24 +80,18 @@ Bun.serve({
     }
 
     if (path === '/') {
-      let indexHtml = await Bun.file("./index.html").text();
-      try {
-        const authInfoText = await Bun.file("./.tmp/auth_info.json").text();
-        const authInfo = JSON.parse(authInfoText) as { nlPort?: number; nlToken?: string };
-        if (authInfo?.nlPort && authInfo?.nlToken) {
-          const inject = `<script>window.NL_PORT=${authInfo.nlPort};window.NL_TOKEN="${authInfo.nlToken}";</script>`;
-          if (indexHtml.includes("</body>")) {
-            indexHtml = indexHtml.replace("</body>", `${inject}</body>`);
-          } else {
-            indexHtml += inject;
-          }
-        }
-      } catch {
-        // ignore missing/invalid auth info
-      }
-      return new Response(indexHtml, {
+      const file = Bun.file(INDEX_FILE);
+      if (!(await file.exists())) return new Response("missing index", { status: 500 });
+      return new Response(file, {
         headers: { "Content-Type": "text/html" }
       });
+    }
+
+    if (path.startsWith("/dist/")) {
+      const relativePath = path.slice("/dist/".length);
+      const file = Bun.file(resolve(FRONTEND_DIR, relativePath));
+      if (!(await file.exists())) return new Response("missing asset", { status: 404 });
+      return new Response(file);
     }
 
     if (req.url.endsWith(`${API_PREFIX}${PREV_FOLDER_ENDPOINT}`)) {
@@ -181,12 +178,6 @@ Bun.serve({
       return new Response(JSON.stringify(state), {
         headers: { "Content-Type": "application/json" },
       });
-    }
-
-    if (path.startsWith("/dist/")) {
-      const file = Bun.file("." + path);
-      if (!(await file.exists())) return new Response("no bitches", { status: 404 });
-      return new Response(file);
     }
 
     return new Response("no bitches", { status: 404 });

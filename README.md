@@ -13,9 +13,14 @@ Requirements:
 - Bun
 - Rust toolchain (for Tauri)
 
-Command:
+Command (safe on fresh shells):
 ```bash
 source "$HOME/.cargo/env" && bunx tauri dev
+```
+
+If Rust is already on PATH:
+```bash
+bunx tauri dev
 ```
 
 What this does:

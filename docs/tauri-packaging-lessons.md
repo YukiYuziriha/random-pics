@@ -1,6 +1,6 @@
 # Tauri Packaging Lessons (Do Not Repeat)
 
-This project moved from Neutralino to Tauri and hit multiple packaging/runtime traps.
+This project moved from an older desktop wrapper to Tauri and hit multiple packaging/runtime traps.
 Use this as a guardrail for future changes.
 
 ## Core architecture now

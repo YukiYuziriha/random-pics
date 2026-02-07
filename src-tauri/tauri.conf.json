@@ -30,9 +30,7 @@
     "active": true,
     "targets": "all",
     "resources": [
-      "../index.html",
-      "../dist",
-      "../dist-tauri/server"
+      "../dist-tauri"
     ],
     "icon": [
       "icons/32x32.png",
