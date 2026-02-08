@@ -5,8 +5,13 @@ Image player / randomizer / timed slideshow for gesture drawing.
 - indexes large folder trees of images
 - supports normal and random traversal modes
 - keeps normal history, random history, and folder history
-- has timer-based image switching
-- persists image + UI toggle state (mirror/greyscale, mode, panel visibility, fullscreen)
+- has timer-based image switching with selectable timer flow mode (`random | normal`)
+- starts timer mode by serving a new image immediately, then begins countdown loop
+- restores the last shown image on app startup
+- supports image transforms (vertical mirror, horizontal mirror, greyscale)
+- supports fullscreen image mode (black background, image-only view)
+- supports UI visibility toggles for both history panels and both button groups
+- persists image + UI state in sqlite `state` table (transforms, timer mode, panel visibility, fullscreen, last image)
 
 ## dev run
 Requirements:
