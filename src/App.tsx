@@ -42,6 +42,37 @@ type PersistedUiState = {
   isFullscreenImage: boolean;
 };
 
+function HoverRevealButton({
+  label,
+  onClick,
+  style,
+  baseOpacity = 0.2,
+}: {
+  label: string;
+  onClick: () => void | Promise<void>;
+  style: Record<string, string | number>;
+  baseOpacity?: number;
+}) {
+  const [isHovered, setIsHovered] = useState(false);
+
+  return (
+    <button
+      onClick={onClick}
+      onMouseEnter={() => setIsHovered(true)}
+      onMouseLeave={() => setIsHovered(false)}
+      onFocus={() => setIsHovered(true)}
+      onBlur={() => setIsHovered(false)}
+      style={{
+        ...style,
+        opacity: isHovered ? 1 : baseOpacity,
+        transition: 'opacity 120ms ease',
+      }}
+    >
+      {label}
+    </button>
+  );
+}
+
 function readPersistedSeconds(key: string, fallback: number): number {
   const raw = globalThis.localStorage?.getItem(key);
   if (!raw) return fallback;
@@ -69,10 +100,6 @@ export default function App() {
   const [showImageHistoryPanel, setShowImageHistoryPanel] = useState(true);
   const [showBottomControls, setShowBottomControls] = useState(true);
   const [isFullscreenImage, setIsFullscreenImage] = useState(false);
-  const [isTopToggleHovered, setIsTopToggleHovered] = useState(false);
-  const [isBottomToggleHovered, setIsBottomToggleHovered] = useState(false);
-  const [isImageContainerHovered, setIsImageContainerHovered] = useState(false);
-  const [isFullscreenHovered, setIsFullscreenHovered] = useState(false);
   const stopTimerRef = useRef<null | (() => void)>(null);
   const timerLoopActiveRef = useRef(false);
   const timerLoopStartSecondsRef = useRef(10);
@@ -572,8 +599,6 @@ export default function App() {
           overflow: 'hidden',
           position: 'relative',
         }}
-        onMouseEnter={() => setIsFullscreenHovered(true)}
-        onMouseLeave={() => setIsFullscreenHovered(false)}
       >
         {imageSrc && (
           <img
@@ -589,21 +614,18 @@ export default function App() {
           />
         )}
 
-        <button
+        <HoverRevealButton
           onClick={handleToggleFullscreen}
+          label="exit-fullscreen"
+          baseOpacity={0}
           style={{
-            ...uiToggleButtonStyle,
-            opacity: isFullscreenHovered ? 1 : 0,
-            transition: 'opacity 120ms ease',
-            pointerEvents: isFullscreenHovered ? 'auto' : 'none',
+            ...uiHideToggleButtonStyle,
             position: 'absolute',
             left: '10px',
             bottom: '10px',
             zIndex: 2,
           }}
-        >
-          exit-fullscreen
-        </button>
+        />
       </div>
     );
   }
@@ -636,18 +658,17 @@ export default function App() {
           flexWrap: 'wrap',
           zIndex: 3,
         }}
-        onMouseEnter={() => setIsTopToggleHovered(true)}
-        onMouseLeave={() => setIsTopToggleHovered(false)}
       >
-        <button
+        <HoverRevealButton
           onClick={handleToggleFolderHistoryPanel}
-          style={{ ...uiHideToggleButtonStyle, opacity: isTopToggleHovered ? 1 : 0 }}
-        >
-          {showFolderHistoryPanel ? 'hide-folder-history' : 'show-folder-history'}
-        </button>
-        <button onClick={handleToggleTopControls} style={{ ...uiHideToggleButtonStyle, opacity: isTopToggleHovered ? 1 : 0 }}>
-          {showTopControls ? 'hide-top-buttons' : 'show-top-buttons'}
-        </button>
+          label={showFolderHistoryPanel ? 'hide-folder-history' : 'show-folder-history'}
+          style={uiHideToggleButtonStyle}
+        />
+        <HoverRevealButton
+          onClick={handleToggleTopControls}
+          label={showTopControls ? 'hide-top-buttons' : 'show-top-buttons'}
+          style={uiHideToggleButtonStyle}
+        />
       </div>
 
       <div
@@ -660,18 +681,17 @@ export default function App() {
           flexWrap: 'wrap',
           zIndex: 3,
         }}
-        onMouseEnter={() => setIsBottomToggleHovered(true)}
-        onMouseLeave={() => setIsBottomToggleHovered(false)}
       >
-        <button
+        <HoverRevealButton
+          onClick={handleToggleBottomControls}
+          label={showBottomControls ? 'hide-bottom-buttons' : 'show-bottom-buttons'}
+          style={uiHideToggleButtonStyle}
+        />
+        <HoverRevealButton
           onClick={handleToggleImageHistoryPanel}
-          style={{ ...uiHideToggleButtonStyle, opacity: isBottomToggleHovered ? 1 : 0 }}
-        >
-          {showImageHistoryPanel ? 'hide-image-history' : 'show-image-history'}
-        </button>
-        <button onClick={handleToggleBottomControls} style={{ ...uiHideToggleButtonStyle, opacity: isBottomToggleHovered ? 1 : 0 }}>
-          {showBottomControls ? 'hide-bottom-buttons' : 'show-bottom-buttons'}
-        </button>
+          label={showImageHistoryPanel ? 'hide-image-history' : 'show-image-history'}
+          style={uiHideToggleButtonStyle}
+        />
       </div>
 
       {showFolderHistoryPanel && (
@@ -749,8 +769,6 @@ export default function App() {
             border: '1px solid #414868',
             position: 'relative',
           }}
-          onMouseEnter={() => setIsImageContainerHovered(true)}
-          onMouseLeave={() => setIsImageContainerHovered(false)}
         >
           {imageSrc && (
             <img
@@ -766,20 +784,16 @@ export default function App() {
             />
           )}
 
-          <button
+          <HoverRevealButton
             onClick={handleToggleFullscreen}
+            label="fullscreen"
             style={{
-              ...uiToggleButtonStyle,
-              opacity: isImageContainerHovered ? 1 : 0,
-              transition: 'opacity 120ms ease',
-              pointerEvents: isImageContainerHovered ? 'auto' : 'none',
+              ...uiHideToggleButtonStyle,
               position: 'absolute',
               left: '8px',
               bottom: '8px',
             }}
-          >
-            fullscreen
-          </button>
+          />
         </div>
 
         {showBottomControls && (
