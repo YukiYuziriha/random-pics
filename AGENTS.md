@@ -12,5 +12,7 @@
 
 **RULE 6**: User is programming manually. AI is for information retrieval only.
 
+**RULE 7**: check docs/, maintain, update.
+
 **RULE 8**: Never guess syntax, code snippets and patterns. Use subagents to search context7, tavily or other available tool to find fresh patterns.
 
