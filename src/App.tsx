@@ -71,6 +71,8 @@ export default function App() {
   const [isFullscreenImage, setIsFullscreenImage] = useState(false);
   const [isTopToggleHovered, setIsTopToggleHovered] = useState(false);
   const [isBottomToggleHovered, setIsBottomToggleHovered] = useState(false);
+  const [isImageContainerHovered, setIsImageContainerHovered] = useState(false);
+  const [isFullscreenHovered, setIsFullscreenHovered] = useState(false);
   const stopTimerRef = useRef<null | (() => void)>(null);
   const timerLoopActiveRef = useRef(false);
   const timerLoopStartSecondsRef = useRef(10);
@@ -570,6 +572,8 @@ export default function App() {
           overflow: 'hidden',
           position: 'relative',
         }}
+        onMouseEnter={() => setIsFullscreenHovered(true)}
+        onMouseLeave={() => setIsFullscreenHovered(false)}
       >
         {imageSrc && (
           <img
@@ -589,6 +593,9 @@ export default function App() {
           onClick={handleToggleFullscreen}
           style={{
             ...uiToggleButtonStyle,
+            opacity: isFullscreenHovered ? 1 : 0,
+            transition: 'opacity 120ms ease',
+            pointerEvents: isFullscreenHovered ? 'auto' : 'none',
             position: 'absolute',
             left: '10px',
             bottom: '10px',
@@ -742,6 +749,8 @@ export default function App() {
             border: '1px solid #414868',
             position: 'relative',
           }}
+          onMouseEnter={() => setIsImageContainerHovered(true)}
+          onMouseLeave={() => setIsImageContainerHovered(false)}
         >
           {imageSrc && (
             <img
@@ -761,6 +770,9 @@ export default function App() {
             onClick={handleToggleFullscreen}
             style={{
               ...uiToggleButtonStyle,
+              opacity: isImageContainerHovered ? 1 : 0,
+              transition: 'opacity 120ms ease',
+              pointerEvents: isImageContainerHovered ? 'auto' : 'none',
               position: 'absolute',
               left: '8px',
               bottom: '8px',
