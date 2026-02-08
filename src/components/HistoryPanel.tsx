@@ -22,6 +22,7 @@ export function HistoryPanel({
         display: 'flex',
         flexDirection: 'column',
         flexShrink: 0,
+        alignSelf: 'center',
         justifyContent: 'center',
         alignItems: 'stretch',
         overflow: 'hidden',

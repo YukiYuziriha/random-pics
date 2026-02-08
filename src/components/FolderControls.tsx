@@ -5,7 +5,6 @@ type FolderControlsProps = {
   onPickFolder: () => void | Promise<void>;
   onReindexFolder: () => void | Promise<void>;
   onNextFolder: () => void | Promise<void>;
-  onFullWipe: () => void | Promise<void>;
 };
 
 export function FolderControls({
@@ -13,7 +12,6 @@ export function FolderControls({
   onPickFolder,
   onReindexFolder,
   onNextFolder,
-  onFullWipe,
 }: FolderControlsProps) {
   return (
     <div
@@ -21,7 +19,6 @@ export function FolderControls({
       style={{
         flexDirection: 'row',
         display: 'flex',
-        marginBottom: 'auto',
         alignItems: 'center',
         gap: '6px',
         flexWrap: 'wrap',
@@ -34,7 +31,6 @@ export function FolderControls({
       <ActionButton label="pick-folder" onClick={onPickFolder} />
       <ActionButton label="reindex-folder" onClick={onReindexFolder} />
       <ActionButton label="next-folder" onClick={onNextFolder} />
-      <ActionButton label="full_wipe" onClick={onFullWipe} />
     </div>
   );
 }

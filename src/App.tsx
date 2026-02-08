@@ -23,9 +23,18 @@ import {
 import { FolderControls } from './components/FolderControls.tsx';
 import { HistoryPanel } from './components/HistoryPanel.tsx';
 import { ImageControls } from './components/ImageControls.tsx';
+import { ActionButton } from './components/ActionButton.tsx';
 
 const INITIAL_TIMER_STORAGE_KEY = 'timer.initial_seconds';
 const REMAINING_TIMER_STORAGE_KEY = 'timer.remaining_seconds';
+const TIMER_FLOW_MODE_STORAGE_KEY = 'timer.flow_mode';
+
+type TimerFlowMode = 'random' | 'normal';
+
+function readPersistedFlowMode(): TimerFlowMode {
+  const raw = globalThis.localStorage?.getItem(TIMER_FLOW_MODE_STORAGE_KEY);
+  return raw === 'normal' ? 'normal' : 'random';
+}
 
 function readPersistedSeconds(key: string, fallback: number): number {
   const raw = globalThis.localStorage?.getItem(key);
@@ -48,9 +57,12 @@ export default function App() {
   const [initialTimerSeconds, setInitialTimerSeconds] = useState(() => readPersistedSeconds(INITIAL_TIMER_STORAGE_KEY, 10));
   const [remainingTimerSeconds, setRemainingTimerSeconds] = useState(() => readPersistedSeconds(REMAINING_TIMER_STORAGE_KEY, 10));
   const [isTimerRunning, setIsTimerRunning] = useState(false);
+  const [timerFlowMode, setTimerFlowMode] = useState<TimerFlowMode>(() => readPersistedFlowMode());
   const stopTimerRef = useRef<null | (() => void)>(null);
   const timerLoopActiveRef = useRef(false);
   const timerLoopStartSecondsRef = useRef(10);
+  const timerCycleIdRef = useRef(0);
+  const timerFlowModeRef = useRef<TimerFlowMode>(readPersistedFlowMode());
 
   const loadHistory = async (endpoint: string) => {
     const res = await fetch(`/api/${endpoint}`);
@@ -139,6 +151,11 @@ export default function App() {
   useEffect(() => {
     globalThis.localStorage?.setItem(REMAINING_TIMER_STORAGE_KEY, String(remainingTimerSeconds));
   }, [remainingTimerSeconds]);
+
+  useEffect(() => {
+    timerFlowModeRef.current = timerFlowMode;
+    globalThis.localStorage?.setItem(TIMER_FLOW_MODE_STORAGE_KEY, timerFlowMode);
+  }, [timerFlowMode]);
 
   const historyVisualSize = 31;
   const half = Math.floor(historyVisualSize / 2);
@@ -256,27 +273,62 @@ export default function App() {
   };
 
   const clearActiveTimer = () => {
+    timerCycleIdRef.current += 1;
     stopTimerRef.current?.();
     stopTimerRef.current = null;
   };
 
+  const loadTimerFlowImage = async (): Promise<boolean> => {
+    if (!(await ensureFolderSelected())) return false;
+
+    if (timerFlowModeRef.current === 'normal') {
+      await handleLoadImage(NEXT_ENDPOINT);
+      await loadHistory(NORMAL_HISTORY_ENDPOINT);
+      return true;
+    }
+
+    await handleLoadImage(NEXT_RANDOM_ENDPOINT);
+    await loadHistory(RANDOM_HISTORY_ENDPOINT);
+    return true;
+  };
+
   const startTimerCycle = (seconds: number) => {
     const startAt = sanitizeSeconds(seconds);
+    timerCycleIdRef.current += 1;
+    const cycleId = timerCycleIdRef.current;
     setIsTimerRunning(true);
     stopTimerRef.current = timer(
       startAt,
       (n) => setRemainingTimerSeconds(n),
       () => {
+        if (timerCycleIdRef.current !== cycleId) {
+          return;
+        }
+
         if (!timerLoopActiveRef.current) {
           setIsTimerRunning(false);
           stopTimerRef.current = null;
           return;
         }
 
-        void loadForceRandomImage();
-        const restartAt = sanitizeSeconds(timerLoopStartSecondsRef.current);
-        setRemainingTimerSeconds(restartAt);
-        startTimerCycle(restartAt);
+        void (async () => {
+          const loaded = await loadTimerFlowImage();
+
+          if (timerCycleIdRef.current !== cycleId || !timerLoopActiveRef.current) {
+            return;
+          }
+
+          if (!loaded) {
+            timerLoopActiveRef.current = false;
+            setIsTimerRunning(false);
+            stopTimerRef.current = null;
+            return;
+          }
+
+          const restartAt = sanitizeSeconds(timerLoopStartSecondsRef.current);
+          setRemainingTimerSeconds(restartAt);
+          startTimerCycle(restartAt);
+        })();
       }
     );
   };
@@ -301,7 +353,7 @@ export default function App() {
     }
   };
 
-  const handleToggleStartStop = () => {
+  const handleToggleStartStop = async () => {
     if (isTimerRunning) {
       timerLoopActiveRef.current = false;
       clearActiveTimer();
@@ -313,6 +365,15 @@ export default function App() {
 
     const startAt = sanitizeSeconds(initialTimerSeconds);
     timerLoopStartSecondsRef.current = startAt;
+
+    const loaded = await loadTimerFlowImage();
+    if (!loaded) {
+      timerLoopActiveRef.current = false;
+      setIsTimerRunning(false);
+      setRemainingTimerSeconds(startAt);
+      return;
+    }
+
     timerLoopActiveRef.current = true;
     setRemainingTimerSeconds(startAt);
     clearActiveTimer();
@@ -330,6 +391,10 @@ export default function App() {
     timerLoopActiveRef.current = true;
     setRemainingTimerSeconds(restartAt);
     startTimerCycle(restartAt);
+  };
+
+  const handleToggleTimerFlowMode = () => {
+    setTimerFlowMode((prev) => (prev === 'random' ? 'normal' : 'random'));
   };
 
   return (
@@ -368,15 +433,42 @@ export default function App() {
           gap: '10px',
         }}
       >
-        <FolderControls
-          onPrevFolder={handlePrevFolder}
-          onPickFolder={async () => {
-            await handlePickFolder();
+        <div
+          style={{
+            display: 'flex',
+            marginBottom: 'auto',
+            alignItems: 'center',
+            gap: '8px',
+            flexWrap: 'wrap',
+            justifyContent: 'center',
           }}
-          onReindexFolder={handleReindexFolder}
-          onNextFolder={handleNextFolder}
-          onFullWipe={handleFullWipe}
-        />
+        >
+          <FolderControls
+            onPrevFolder={handlePrevFolder}
+            onPickFolder={async () => {
+              await handlePickFolder();
+            }}
+            onReindexFolder={handleReindexFolder}
+            onNextFolder={handleNextFolder}
+          />
+
+          <div
+            style={{
+              display: 'flex',
+              flexDirection: 'row',
+              alignItems: 'center',
+              gap: '6px',
+              flexWrap: 'wrap',
+              padding: '8px',
+              border: '1px solid #414868',
+              background: '#1f2335',
+            }}
+          >
+            <ActionButton label="reset-random-history" onClick={handleResetRandomHistory} />
+            <ActionButton label="reset_normal_history" onClick={handleResetNormalHistory} />
+            <ActionButton label="full_wipe" onClick={handleFullWipe} />
+          </div>
+        </div>
 
         <div
           data-testid="image-container"
@@ -412,18 +504,18 @@ export default function App() {
           onPrevRandom={handlePrevRandomImage}
           onForceRandom={loadForceRandomImage}
           onNextRandom={handleNextRandomImage}
-          onResetRandomHistory={handleResetRandomHistory}
-          onResetNormalHistory={handleResetNormalHistory}
           onToggleVerticalMirror={handleToggleVerticalMirror}
           onToggleHorizontalMirror={handleToggleHorizontalMirror}
           onToggleGreyscale={handleToggleGreyscale}
           onToggleStartStop={handleToggleStartStop}
           onTogglePausePlay={handleTogglePausePlay}
+          onToggleTimerFlowMode={handleToggleTimerFlowMode}
           onInitialSecondsChange={handleInitialTimerSecondsChange}
           onRemainingSecondsChange={handleRemainingTimerSecondsChange}
           initialSeconds={initialTimerSeconds}
           remainingSeconds={remainingTimerSeconds}
           isRunning={isTimerRunning}
+          timerFlowMode={timerFlowMode}
         />
       </div>
 
