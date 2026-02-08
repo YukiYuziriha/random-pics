@@ -33,8 +33,11 @@ const listImagePaths = db.query(`
                                  ORDER BY id
                                  `);
 const getImagePath = db.query(`
-                              SELECT path FROM images WHERE id = ?
-                              `);
+                               SELECT path FROM images WHERE id = ?
+                               `);
+const getImageFolderId = db.query(`
+                                   SELECT folder_id FROM images WHERE id = ?
+                                   `);
 const setCurrentFolderIndex = db.query(`
                                         UPDATE folders
                                         SET current_index = $currentIndex
@@ -129,6 +132,16 @@ const setStateQuery = db.query(`
                                     is_fullscreen_image = $isFullscreenImage
                                 WHERE id = 1
                                 `);
+const setLastImageIdQuery = db.query(`
+                                      UPDATE state
+                                      SET last_image_id = $lastImageId
+                                      WHERE id = 1
+                                      `);
+const getLastImageIdQuery = db.query(`
+                                      SELECT last_image_id
+                                      FROM state
+                                      WHERE id = 1
+                                      `);
 
 type ImageState = {
   verticalMirror: boolean;
@@ -257,6 +270,7 @@ async function loadByImageId(imageId: number): Promise<ArrayBuffer> {
   if (!row) {
     throw new Error("image id not found");
   }
+  setLastImageIdQuery.run({ $lastImageId: imageId });
   const data = await Bun.file(row.path).arrayBuffer();
   console.log(`loaded ${row.path} (${(data.byteLength/1024/1024).toFixed(2)} Mbytes)`);
   return data;
@@ -373,6 +387,15 @@ export async function getCurrentImageOrFirst(): Promise<ArrayBuffer> {
     throw new Error("no images available");
   }
 
+  const lastImageRow = getLastImageIdQuery.get() as { last_image_id: number | null } | null;
+  const lastImageId = lastImageRow?.last_image_id ?? null;
+  if (lastImageId != null) {
+    const lastImageFolderRow = getImageFolderId.get(lastImageId) as { folder_id: number | null } | null;
+    if (lastImageFolderRow?.folder_id === folderId) {
+      return loadByImageId(lastImageId);
+    }
+  }
+
   let index = getCurrentNormalHistoryIndex(folderId);
   if (index < 0 || index >= imageIds.length) {
     index = 0;
@@ -471,6 +494,7 @@ export function fullWipe(): void {
   db.run("DELETE FROM random_history");
   db.run("DELETE FROM current_lap");
   setCurrentFolderId.run({ $id: null });
+  setLastImageIdQuery.run({ $lastImageId: null });
 }
 
 export function setCurrentFolderByPath(path: string): number {

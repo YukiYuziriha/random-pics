@@ -36,7 +36,8 @@ db.run(`
     show_top_controls INTEGER NOT NULL DEFAULT 1,
     show_image_history_panel INTEGER NOT NULL DEFAULT 1,
     show_bottom_controls INTEGER NOT NULL DEFAULT 1,
-    is_fullscreen_image INTEGER NOT NULL DEFAULT 0
+    is_fullscreen_image INTEGER NOT NULL DEFAULT 0,
+    last_image_id INTEGER
   );
   CREATE TABLE IF NOT EXISTS random_history (
     folder_id INTEGER NOT NULL,
@@ -55,3 +56,20 @@ db.run(`
   );
 `);
 db.run(`INSERT OR IGNORE INTO state (id) VALUES (1);`);
+
+const stateTableColumnsQuery = db.query("PRAGMA table_info(state)");
+
+function ensureStateColumn(columnName: string, columnDefinition: string): void {
+  const columns = stateTableColumnsQuery.all() as Array<{ name: string }>;
+  const hasColumn = columns.some((column) => column.name === columnName);
+  if (hasColumn) return;
+  db.run(`ALTER TABLE state ADD COLUMN ${columnDefinition}`);
+}
+
+ensureStateColumn("timer_flow_mode", "timer_flow_mode TEXT NOT NULL DEFAULT 'random'");
+ensureStateColumn("show_folder_history_panel", "show_folder_history_panel INTEGER NOT NULL DEFAULT 1");
+ensureStateColumn("show_top_controls", "show_top_controls INTEGER NOT NULL DEFAULT 1");
+ensureStateColumn("show_image_history_panel", "show_image_history_panel INTEGER NOT NULL DEFAULT 1");
+ensureStateColumn("show_bottom_controls", "show_bottom_controls INTEGER NOT NULL DEFAULT 1");
+ensureStateColumn("is_fullscreen_image", "is_fullscreen_image INTEGER NOT NULL DEFAULT 0");
+ensureStateColumn("last_image_id", "last_image_id INTEGER");
