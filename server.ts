@@ -168,6 +168,12 @@ Bun.serve({
           verticalMirror: Boolean(body?.verticalMirror),
           horizontalMirror: Boolean(body?.horizontalMirror),
           greyscale: Boolean(body?.greyscale),
+          timerFlowMode: body?.timerFlowMode === 'normal' ? 'normal' : 'random',
+          showFolderHistoryPanel: Boolean(body?.showFolderHistoryPanel),
+          showTopControls: Boolean(body?.showTopControls),
+          showImageHistoryPanel: Boolean(body?.showImageHistoryPanel),
+          showBottomControls: Boolean(body?.showBottomControls),
+          isFullscreenImage: Boolean(body?.isFullscreenImage),
         });
         return new Response(JSON.stringify({ ok: true }), {
           headers: { "Content-Type": "application/json" },

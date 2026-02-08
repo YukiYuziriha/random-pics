@@ -30,7 +30,13 @@ db.run(`
     current_folder_id INTEGER,
     vertical_mirror INTEGER NOT NULL DEFAULT 0,
     horizontal_mirror INTEGER NOT NULL DEFAULT 0,
-    greyscale INTEGER NOT NULL DEFAULT 0
+    greyscale INTEGER NOT NULL DEFAULT 0,
+    timer_flow_mode TEXT NOT NULL DEFAULT 'random',
+    show_folder_history_panel INTEGER NOT NULL DEFAULT 1,
+    show_top_controls INTEGER NOT NULL DEFAULT 1,
+    show_image_history_panel INTEGER NOT NULL DEFAULT 1,
+    show_bottom_controls INTEGER NOT NULL DEFAULT 1,
+    is_fullscreen_image INTEGER NOT NULL DEFAULT 0
   );
   CREATE TABLE IF NOT EXISTS random_history (
     folder_id INTEGER NOT NULL,

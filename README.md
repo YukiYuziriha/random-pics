@@ -6,7 +6,7 @@ Image player / randomizer / timed slideshow for gesture drawing.
 - supports normal and random traversal modes
 - keeps normal history, random history, and folder history
 - has timer-based image switching
-- persists mirror/greyscale state
+- persists image + UI toggle state (mirror/greyscale, mode, panel visibility, fullscreen)
 
 ## dev run
 Requirements:

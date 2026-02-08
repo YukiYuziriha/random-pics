@@ -104,7 +104,15 @@ const deleteImagesByFolderId = db.query(`
                                          WHERE folder_id = ?
                                          `);
 const getStateQuery = db.query(`
-                                SELECT vertical_mirror, horizontal_mirror, greyscale
+                                SELECT vertical_mirror,
+                                       horizontal_mirror,
+                                       greyscale,
+                                       timer_flow_mode,
+                                       show_folder_history_panel,
+                                       show_top_controls,
+                                       show_image_history_panel,
+                                       show_bottom_controls,
+                                       is_fullscreen_image
                                 FROM state
                                 WHERE id = 1
                                 `);
@@ -112,9 +120,27 @@ const setStateQuery = db.query(`
                                 UPDATE state
                                 SET vertical_mirror = $verticalMirror,
                                     horizontal_mirror = $horizontalMirror,
-                                    greyscale = $greyscale
+                                    greyscale = $greyscale,
+                                    timer_flow_mode = $timerFlowMode,
+                                    show_folder_history_panel = $showFolderHistoryPanel,
+                                    show_top_controls = $showTopControls,
+                                    show_image_history_panel = $showImageHistoryPanel,
+                                    show_bottom_controls = $showBottomControls,
+                                    is_fullscreen_image = $isFullscreenImage
                                 WHERE id = 1
                                 `);
+
+type ImageState = {
+  verticalMirror: boolean;
+  horizontalMirror: boolean;
+  greyscale: boolean;
+  timerFlowMode: 'random' | 'normal';
+  showFolderHistoryPanel: boolean;
+  showTopControls: boolean;
+  showImageHistoryPanel: boolean;
+  showBottomControls: boolean;
+  isFullscreenImage: boolean;
+};
 
 function randomHistoryShiftUpSafe(folderId: number): void {
   db.run("BEGIN");
@@ -399,20 +425,43 @@ export function resetNormalHistory(): void {
   setCurrentNormalHistoryIndex(current.id, -1);
 }
 
-export function getImageState(): { verticalMirror: boolean; horizontalMirror: boolean; greyscale: boolean } {
-  const row = getStateQuery.get() as { vertical_mirror: number; horizontal_mirror: number; greyscale: number } | null;
+export function getImageState(): ImageState {
+  const row = getStateQuery.get() as {
+    vertical_mirror: number;
+    horizontal_mirror: number;
+    greyscale: number;
+    timer_flow_mode: string;
+    show_folder_history_panel: number;
+    show_top_controls: number;
+    show_image_history_panel: number;
+    show_bottom_controls: number;
+    is_fullscreen_image: number;
+  } | null;
+
   return {
     verticalMirror: Boolean(row?.vertical_mirror ?? 0),
     horizontalMirror: Boolean(row?.horizontal_mirror ?? 0),
     greyscale: Boolean(row?.greyscale ?? 0),
+    timerFlowMode: row?.timer_flow_mode === 'normal' ? 'normal' : 'random',
+    showFolderHistoryPanel: Boolean(row?.show_folder_history_panel ?? 1),
+    showTopControls: Boolean(row?.show_top_controls ?? 1),
+    showImageHistoryPanel: Boolean(row?.show_image_history_panel ?? 1),
+    showBottomControls: Boolean(row?.show_bottom_controls ?? 1),
+    isFullscreenImage: Boolean(row?.is_fullscreen_image ?? 0),
   };
 }
 
-export function setImageState(state: { verticalMirror: boolean; horizontalMirror: boolean; greyscale: boolean }): void {
+export function setImageState(state: ImageState): void {
   setStateQuery.run({
     $verticalMirror: state.verticalMirror ? 1 : 0,
     $horizontalMirror: state.horizontalMirror ? 1 : 0,
     $greyscale: state.greyscale ? 1 : 0,
+    $timerFlowMode: state.timerFlowMode,
+    $showFolderHistoryPanel: state.showFolderHistoryPanel ? 1 : 0,
+    $showTopControls: state.showTopControls ? 1 : 0,
+    $showImageHistoryPanel: state.showImageHistoryPanel ? 1 : 0,
+    $showBottomControls: state.showBottomControls ? 1 : 0,
+    $isFullscreenImage: state.isFullscreenImage ? 1 : 0,
   });
 }
 
