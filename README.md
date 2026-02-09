@@ -1,17 +1,13 @@
 ## random-pics
-Image player / randomizer / timed slideshow for gesture drawing.
+Ridiculously fast desktop local image viewer for gesture drawing and reference practice.
 
 ## what it does
-- indexes large folder trees of images
-- supports normal and random traversal modes
-- keeps normal history, random history, and folder history
-- has timer-based image switching with selectable timer flow mode (`random | normal`)
-- starts timer mode by serving a new image immediately, then begins countdown loop
-- restores the last shown image on app startup
-- supports image transforms (vertical mirror, horizontal mirror, greyscale)
-- supports fullscreen image mode (black background, image-only view)
-- supports UI visibility toggles for both history panels and both button groups
-- persists image + UI state in sqlite `state` table (transforms, timer mode, panel visibility, fullscreen, last image)
+- opens large image folders quickly
+- lets you browse in order or shuffle randomly
+- includes a timed slideshow mode for hands-free practice
+- remembers your last image and UI settings between launches
+- offers quick image aids: mirror and greyscale
+- keeps session history so you can jump back easily
 
 ## dev run
 Requirements:
@@ -40,18 +36,15 @@ This project currently uses TypeScript typecheck as the main validation step:
 bun tsc
 ```
 
-## build standalone .deb
+## build app package
 ```bash
-source "$HOME/.cargo/env" && bunx tauri build --bundles deb
+source "$HOME/.cargo/env" && bunx tauri build
 ```
 
-Output package:
-`src-tauri/target/release/bundle/deb/random-pics_0.1.0_amd64.deb`
+Output files are generated per platform in:
+`src-tauri/target/release/bundle/`
 
-Install:
-```bash
-sudo dpkg -i src-tauri/target/release/bundle/deb/random-pics_0.1.0_amd64.deb
-```
+Typical outputs include `.deb`/`.AppImage` on Linux, `.dmg` on macOS, and `.msi` on Windows.
 
 Run installed app:
 ```bash
@@ -60,7 +53,7 @@ random-pics
 
 ## change workflow (important)
 If you change `src/App.tsx` (or any frontend file):
-- just rebuild package (`bunx tauri build --bundles deb`) and reinstall `.deb`
+- rebuild with `bunx tauri build` and reinstall the generated package for your OS
 
 If you change backend behavior, update Rust code in:
 - `src-tauri/src/*.rs`
@@ -68,11 +61,6 @@ If you change backend behavior, update Rust code in:
 - `src-tauri/capabilities/*.json`
 
 Current runtime architecture:
-- no Bun backend process in app runtime
-- no localhost `127.0.0.1:3000` dependency
-- no `/api/*` HTTP transport in frontend app flow
-
-## package size note
-If `.deb` size looks unexpectedly large, check for stale build artifacts in `dist-tauri`.
-
-This app bundles `../dist-tauri` as Tauri resources. If `dist-tauri/server` exists from older builds, it will be included in the package even though runtime no longer uses it.
+- desktop app powered by Tauri commands (`invoke`) for backend logic
+- frontend assets are bundled into the app package
+- no separate local API server required at runtime
