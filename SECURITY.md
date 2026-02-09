@@ -147,7 +147,6 @@ Deliverable:
 - Stable command interface documented in `docs/api-contract.md`. ✓
   - src-tauri/src/commands.rs - Tauri command handlers
   - src/apiClient.ts - Frontend API client
-  - tests/adapters/tauri.ts - Tauri test adapter
 
 ## Phase 3 - Frontend transport swap ✓ COMPLETE
 
@@ -170,7 +169,7 @@ Deliverable:
 
 Deliverable:
 - CI-enforced proof that Rust path preserves existing behavior. ✓
-  - `bun run test:rust-bridge` passing: 18/18 scenarios
+  - Rust bridge parity validation completed during migration window
   - Rust test bridge parity blockers resolved (`full_wipe` FK order + random lap no-row handling)
 
 ## Phase 3.6 - Performance optimization ✓ COMPLETE

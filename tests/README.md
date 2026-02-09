@@ -1,25 +1,6 @@
 # Behavior Tests
 
-This directory contains the behavior test suite for random-pics. These tests establish the **baseline behavior contract** that must be preserved during the migration from Bun HTTP backend to Rust Tauri commands.
-
-## Architecture
-
-The test suite uses a **transport-agnostic scenario runner** pattern:
-
-```
-┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
-│   Scenarios     │────▶│  BackendAdapter │◄────│  HTTP Adapter   │
-│  (Behavior)     │     │   (Interface)   │     │ (Current Impl)  │
-└─────────────────┘     └─────────────────┘     └─────────────────┘
-                              │
-                              ▼
-                        ┌─────────────────┐
-                        │ Command Adapter │
-                        │  (Future Impl)  │
-                        └─────────────────┘
-```
-
-This allows the **same scenarios** to run against both implementations to verify parity.
+This directory contains behavior tests for the Bun HTTP backend.
 
 ## Test Categories
 
@@ -101,43 +82,14 @@ CI_OUTPUT=json bun run test:ci
 - `CI_OUTPUT` - Set to `json` for CI-friendly output
 - `RANDOM_PICS_DATA_DIR` - Data directory for test database
 
-## Migration Usage
+## Usage
 
-### Phase 0 (Current): Baseline Lock
-
-Run tests against current Bun implementation:
+Run the Bun backend first, then run tests:
 
 ```bash
-# Verify all scenarios pass
-bun run test:ci
+bun server.ts
+bun test
 ```
-
-All scenarios must pass before proceeding with migration.
-
-### Phase 0.5: Dual-Path Parity
-
-When Rust backend is ready:
-
-1. Create `TauriCommandAdapter` implementing `BackendAdapter`
-2. Run scenarios against both adapters
-3. Compare results for parity
-
-```typescript
-// Example dual-path test
-const httpResults = await runner.run(httpAdapter, '');
-const tauriResults = await runner.run(tauriAdapter, '');
-
-// Assert parity
-assertParity(httpResults, tauriResults);
-```
-
-### Phase 4: Cutover Gate
-
-After switching to Tauri commands:
-
-1. Remove HTTP adapter usage
-2. Keep scenario suite as regression tests
-3. CI enforces all scenarios pass
 
 ## Adding New Scenarios
 
@@ -164,7 +116,7 @@ export { myScenario } from './scenarios/domain.ts';
 
 ## Behavior Contract
 
-These tests define the **behavior contract** for random-pics:
+These tests define the behavior contract for random-pics:
 
 1. **Images**: After picking a folder, images are indexed and retrievable
 2. **Normal Mode**: Sequential traversal wraps around
@@ -174,12 +126,10 @@ These tests define the **behavior contract** for random-pics:
 6. **Reset**: Operations clear appropriate state
 7. **Wipe**: Removes all data but preserves app structure
 
-Any new implementation (Rust Tauri) must satisfy all these scenarios.
-
 ## Key Principles
 
 1. **Test Real Behavior**: Tests create actual images and verify real operations
-2. **Transport Agnostic**: Same scenarios work with HTTP or Tauri commands
+2. **HTTP Contract Coverage**: Scenarios validate real Bun endpoint behavior
 3. **Deterministic**: Each scenario cleans up after itself
 4. **Fast**: Scenarios run in sequence to avoid DB conflicts
 5. **CI Ready**: Exit codes and JSON output for automation

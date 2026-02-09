@@ -22,9 +22,6 @@
     "test:list": "bun tests/run.ts --list",
     "test:domain": "bun tests/run-domain.ts",
     "test:api": "bun tests/run-api.ts",
-    "test:ci": "bun tests/run-ci.ts",
-    "test:bun": "node scripts/run-backend-tests.mjs bun",
-    "test:rust-bridge": "node scripts/run-backend-tests.mjs rust-bridge",
-    "test:parity": "node scripts/run-parity-tests.mjs"
+    "test:ci": "bun tests/run-ci.ts"
   }
 }

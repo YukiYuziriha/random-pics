@@ -1,10 +1,7 @@
 /**
  * Behavior Contract Types
  * 
- * These types define the expected behavior of the random-pics app
- * independent of transport (HTTP vs Tauri commands).
- * 
- * This is the contract that both implementations must satisfy.
+ * These types define the expected behavior contract for the Bun HTTP backend.
  */
 
 export type FolderInfo = {
@@ -37,8 +34,7 @@ export type ImageState = {
 export type ImageData = ArrayBuffer;
 
 /**
- * BackendAdapter defines the interface that both HTTP and Tauri implementations
- * must implement. This allows the same test scenarios to run against both.
+ * BackendAdapter defines the interface used by test scenarios.
  */
 export interface BackendAdapter {
   // Folder operations
