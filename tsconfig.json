@@ -44,6 +44,6 @@
     "allowImportingTsExtensions": true,
     "noEmit": true,
   },
-  "include": ["src/**/*.ts", "src/**/*.tsx", "server.ts", "tests/**/*.ts"],
+  "include": ["src/**/*.ts", "src/**/*.tsx"],
   "exclude": ["src-tauri/target/**", "dist/**", "resources/**"]
 }

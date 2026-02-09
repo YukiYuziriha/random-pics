@@ -9,6 +9,7 @@ type HistoryPanelProps = {
   items: Array<HistoryItem | null>;
   currentSlotIndex: number;
   pendingItem?: string | null;
+  onItemClick?: (slotIndex: number) => void;
 };
 
 function displayLabel(item: HistoryItem): string {
@@ -31,6 +32,7 @@ export function HistoryPanel({
   items,
   currentSlotIndex,
   pendingItem = null,
+  onItemClick,
 }: HistoryPanelProps) {
   return (
     <div
@@ -61,10 +63,12 @@ export function HistoryPanel({
         {items.map((item, i) => {
           const isCurrent = i === currentSlotIndex;
           const isPending = !!item && pendingItem === itemPath(item);
+          const isClickable = !!item && !isCurrent && !!onItemClick;
           return (
             <div
               data-testid={listItemTestId}
               key={`${i}-${item ?? 'empty'}`}
+              onClick={isClickable ? () => onItemClick(i) : undefined}
               style={{
                 height: '24px',
                 display: 'flex',
@@ -78,6 +82,7 @@ export function HistoryPanel({
                 fontWeight: isCurrent ? 700 : 400,
                 fontFamily: 'monospace',
                 borderRadius: '2px',
+                cursor: isClickable ? 'pointer' : 'default',
               }}
             >
               {item ? `${displayLabel(item)}${isPending ? ' [loading...]' : ''}` : 'placeholder'}
