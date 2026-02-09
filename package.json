@@ -16,6 +16,11 @@
     "build": "bun build ./src/main.tsx --outdir ./dist --minify",
     "build:tauri": "bun build ./src/main.tsx --outdir ./dist-tauri/dist --minify && cp ./index.html ./dist-tauri/index.html && bun build ./server.ts --compile --outfile ./dist-tauri/server",
     "build:watch": "bun build ./src/main.tsx --outdir ./dist --minify --watch",
-    "dev": "bun run build:watch & bun ./server.ts & wait"
+    "dev": "bun run build:watch & bun ./server.ts & wait",
+    "test": "bun tests/run.ts",
+    "test:list": "bun tests/run.ts --list",
+    "test:domain": "bun tests/run-domain.ts",
+    "test:api": "bun tests/run-api.ts",
+    "test:ci": "bun tests/run-ci.ts"
   }
 }
