@@ -23,6 +23,7 @@ export type FolderHistory = {
 };
 
 export type FolderHistoryItem = {
+  id: number;
   path: string;
   imageCount: number;
 };
@@ -60,36 +61,36 @@ export async function reindexCurrentFolder(): Promise<FolderInfo> {
   return await invoke('reindex_current_folder');
 }
 
+export type ImageResponse = {
+  data: number[];
+  folder: FolderInfo | null;
+  auto_switched_folder: boolean;
+};
+
 // Image traversal - Normal mode
-export async function getCurrentImage(): Promise<Uint8Array> {
-  const data = await invoke<number[]>('get_current_image');
-  return new Uint8Array(data);
+export async function getCurrentImage(): Promise<ImageResponse> {
+  return await invoke<ImageResponse>('get_current_image');
 }
 
-export async function getNextImage(): Promise<Uint8Array> {
-  const data = await invoke<number[]>('get_next_image');
-  return new Uint8Array(data);
+export async function getNextImage(): Promise<ImageResponse> {
+  return await invoke<ImageResponse>('get_next_image');
 }
 
-export async function getPrevImage(): Promise<Uint8Array> {
-  const data = await invoke<number[]>('get_prev_image');
-  return new Uint8Array(data);
+export async function getPrevImage(): Promise<ImageResponse> {
+  return await invoke<ImageResponse>('get_prev_image');
 }
 
 // Image traversal - Random mode
-export async function getNextRandomImage(): Promise<Uint8Array> {
-  const data = await invoke<number[]>('get_next_random_image');
-  return new Uint8Array(data);
+export async function getNextRandomImage(): Promise<ImageResponse> {
+  return await invoke<ImageResponse>('get_next_random_image');
 }
 
-export async function getPrevRandomImage(): Promise<Uint8Array> {
-  const data = await invoke<number[]>('get_prev_random_image');
-  return new Uint8Array(data);
+export async function getPrevRandomImage(): Promise<ImageResponse> {
+  return await invoke<ImageResponse>('get_prev_random_image');
 }
 
-export async function getForceRandomImage(): Promise<Uint8Array> {
-  const data = await invoke<number[]>('get_force_random_image');
-  return new Uint8Array(data);
+export async function getForceRandomImage(): Promise<ImageResponse> {
+  return await invoke<ImageResponse>('get_force_random_image');
 }
 
 // History operations
@@ -136,12 +137,22 @@ export async function setFolderByIndex(index: number): Promise<FolderInfo> {
   return await invoke('set_folder_by_index', { index });
 }
 
-export async function setNormalImageByIndex(index: number): Promise<Uint8Array> {
-  const data = await invoke<number[]>('set_normal_image_by_index', { index });
-  return new Uint8Array(data);
+export async function setNormalImageByIndex(index: number): Promise<ImageResponse> {
+  return await invoke<ImageResponse>('set_normal_image_by_index', { index });
 }
 
-export async function setRandomImageByIndex(index: number): Promise<Uint8Array> {
-  const data = await invoke<number[]>('set_random_image_by_index', { index });
-  return new Uint8Array(data);
+export async function setRandomImageByIndex(index: number): Promise<ImageResponse> {
+  return await invoke<ImageResponse>('set_random_image_by_index', { index });
+}
+
+export async function getCurrentFolder(): Promise<FolderInfo | null> {
+  return await invoke('get_current_folder');
+}
+
+export async function deleteFolder(folderId: number): Promise<void> {
+  await invoke('delete_folder', { folderId });
+}
+
+export async function cleanupStaleFolders(): Promise<string[]> {
+  return await invoke('cleanup_stale_folders');
 }

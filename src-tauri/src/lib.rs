@@ -73,6 +73,9 @@ pub fn run() {
                 commands::set_folder_by_index,
                 commands::set_normal_image_by_index,
                 commands::set_random_image_by_index,
+                commands::get_current_folder,
+                commands::delete_folder,
+                commands::cleanup_stale_folders,
             ])
         .run(tauri::generate_context!())
         .unwrap_or_else(|err| eprintln!("error while running tauri application: {}", err));

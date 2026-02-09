@@ -25,9 +25,14 @@ import {
   setFolderByIndex,
   setNormalImageByIndex,
   setRandomImageByIndex,
+  getCurrentFolder,
+  deleteFolder,
+  cleanupStaleFolders,
   type FolderHistoryItem,
   type ImageHistory,
   type ImageState,
+  type FolderInfo,
+  type ImageResponse,
 } from './apiClient.ts';
 import { FolderControls } from './components/FolderControls.tsx';
 import { HistoryPanel } from './components/HistoryPanel.tsx';
@@ -36,8 +41,39 @@ import { ActionButton } from './components/ActionButton.tsx';
 
 const INITIAL_TIMER_STORAGE_KEY = 'timer.initial_seconds';
 const REMAINING_TIMER_STORAGE_KEY = 'timer.remaining_seconds';
+const FOLDER_HISTORY_MODE_KEY = 'folder.history_mode';
 
 type TimerFlowMode = 'random' | 'normal';
+
+type ToastState = {
+  message: string;
+  visible: boolean;
+};
+
+function readFolderHistoryMode(): Record<number, 'normal' | 'random'> {
+  const raw = globalThis.localStorage?.getItem(FOLDER_HISTORY_MODE_KEY);
+  if (!raw) return {};
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return {};
+  }
+}
+
+function writeFolderHistoryMode(modes: Record<number, 'normal' | 'random'>) {
+  globalThis.localStorage?.setItem(FOLDER_HISTORY_MODE_KEY, JSON.stringify(modes));
+}
+
+function getFolderHistoryMode(folderId: number): 'normal' | 'random' {
+  const modes = readFolderHistoryMode();
+  return modes[folderId] ?? 'normal';
+}
+
+function setFolderHistoryMode(folderId: number, mode: 'normal' | 'random') {
+  const modes = readFolderHistoryMode();
+  modes[folderId] = mode;
+  writeFolderHistoryMode(modes);
+}
 
 type PersistedUiState = {
   verticalMirror: boolean;
@@ -113,6 +149,8 @@ export default function App() {
   const [isIndexing, setIsIndexing] = useState(false);
   const [indexingFolderPath, setIndexingFolderPath] = useState<string | null>(null);
   const [indexingLogs, setIndexingLogs] = useState<string[]>([]);
+  const [toast, setToast] = useState<ToastState>({ message: '', visible: false });
+  const toastTimeoutRef = useRef<number | null>(null);
   const indexingLogContainerRef = useRef<HTMLDivElement | null>(null);
   const stopTimerRef = useRef<null | (() => void)>(null);
   const timerLoopActiveRef = useRef(false);
@@ -124,6 +162,10 @@ export default function App() {
     setHistory(history.history);
     setHistoryIndex(history.currentIndex);
     setActiveHistoryMode(mode);
+    const currentFolder = await getCurrentFolder();
+    if (currentFolder) {
+      setFolderHistoryMode(currentFolder.id, mode);
+    }
   };
 
   const appendIndexLog = (line: string) => {
@@ -144,17 +186,57 @@ export default function App() {
     return String(err);
   };
 
+  const showToast = (message: string) => {
+    if (toastTimeoutRef.current) {
+      window.clearTimeout(toastTimeoutRef.current);
+    }
+    setToast({ message, visible: true });
+    toastTimeoutRef.current = window.setTimeout(() => {
+      setToast({ message: '', visible: false });
+    }, 3000);
+  };
+
   const isTypingTarget = (target: EventTarget | null): boolean => {
     if (!(target instanceof Element)) return false;
     const tag = target.tagName.toLowerCase();
     return tag === 'input' || tag === 'textarea' || target.hasAttribute('contenteditable');
   };
 
-  const handleLoadImage = async (data: Uint8Array) => {
-    const arrayBuffer = data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength) as ArrayBuffer;
+  const handleLoadImage = async (response: ImageResponse) => {
+    const { data, folder, auto_switched_folder } = response;
+
+    if (!folder) {
+      setFolderHistory([]);
+      setFolderHistoryIndex(-1);
+      setHistory([]);
+      setHistoryIndex(-1);
+      setImageSrc('');
+      return;
+    }
+
+    const arrayBuffer = new Uint8Array(data).buffer.slice(0) as ArrayBuffer;
     const blob = new Blob([arrayBuffer]);
     const url = URL.createObjectURL(blob);
     setImageSrc(url);
+
+    if (auto_switched_folder) {
+      await loadFolderHistory();
+      showToast(`Switched to folder: ${folder.path}`);
+    }
+  };
+
+  const handleBackendError = async (err: unknown) => {
+    await loadFolderHistory();
+    showToast(formatError(err));
+  };
+
+  const runOp = async <T,>(op: () => Promise<T>): Promise<T | null> => {
+    try {
+      return await op();
+    } catch (err) {
+      await handleBackendError(err);
+      return null;
+    }
   };
 
   const loadFolderHistory = async (): Promise<{ history: FolderHistoryItem[]; currentIndex: number }> => {
@@ -217,17 +299,19 @@ export default function App() {
 
     startIndexingUi(folderPath);
     try {
-      await pickFolder(folderPath);
+      const folderInfo = await pickFolder(folderPath);
       await loadFolderHistory();
       const imageData = await getCurrentImage();
       await handleLoadImage(imageData);
-      const history = await getNormalHistory();
-      await loadHistory(history, 'normal');
+      const savedMode = getFolderHistoryMode(folderInfo.id);
+      const history = savedMode === 'normal' ? await getNormalHistory() : await getRandomHistory();
+      await loadHistory(history, savedMode);
       endIndexingUi(true);
       return true;
     } catch (err) {
       appendIndexLog(`error:${formatError(err)}`);
       endIndexingUi(false);
+      showToast(formatError(err));
       throw err;
     }
   };
@@ -246,8 +330,15 @@ export default function App() {
       if (folderData.currentIndex >= 0) {
         const imageData = await getCurrentImage();
         await handleLoadImage(imageData);
-        const history = await getNormalHistory();
-        await loadHistory(history, 'normal');
+        const currentFolder = await getCurrentFolder();
+        if (currentFolder) {
+          const savedMode = getFolderHistoryMode(currentFolder.id);
+          const history = savedMode === 'normal' ? await getNormalHistory() : await getRandomHistory();
+          await loadHistory(history, savedMode);
+        } else {
+          const history = await getNormalHistory();
+          await loadHistory(history, 'normal');
+        }
       }
     };
 
@@ -377,12 +468,17 @@ export default function App() {
     if (targetIndex === folderHistoryIndex) return;
     if (targetIndex < 0 || targetIndex >= folderHistory.length) return;
 
-    await setFolderByIndex(targetIndex);
-    await loadFolderHistory();
-    const imageData = await getCurrentImage();
-    await handleLoadImage(imageData);
-    const history = await getNormalHistory();
-    await loadHistory(history, 'normal');
+    try {
+      const folderInfo = await setFolderByIndex(targetIndex);
+      await loadFolderHistory();
+      const imageData = await getCurrentImage();
+      await handleLoadImage(imageData);
+      const savedMode = getFolderHistoryMode(folderInfo.id);
+      const history = savedMode === 'normal' ? await getNormalHistory() : await getRandomHistory();
+      await loadHistory(history, savedMode);
+    } catch (err) {
+      await handleBackendError(err);
+    }
   };
 
   const handleImageItemClick = async (slotIndex: number) => {
@@ -393,36 +489,42 @@ export default function App() {
     if (targetIndex < 0 || targetIndex >= history.length) return;
 
     if (activeHistoryMode === 'normal') {
-      const imageData = await setNormalImageByIndex(targetIndex);
-      await handleLoadImage(imageData);
-      const hist = await getNormalHistory();
-      await loadHistory(hist, 'normal');
+      const res = await runOp(() => setNormalImageByIndex(targetIndex));
+      if (!res) return;
+      await handleLoadImage(res);
+      const hist = await runOp(() => getNormalHistory());
+      if (hist) await loadHistory(hist, 'normal');
     } else {
-      const imageData = await setRandomImageByIndex(targetIndex);
-      await handleLoadImage(imageData);
-      const hist = await getRandomHistory();
-      await loadHistory(hist, 'random');
+      const res = await runOp(() => setRandomImageByIndex(targetIndex));
+      if (!res) return;
+      await handleLoadImage(res);
+      const hist = await runOp(() => getRandomHistory());
+      if (hist) await loadHistory(hist, 'random');
     }
   };
 
   const loadForceRandomImage = async () => {
     if (isIndexing) return;
     if (!(await ensureFolderSelected())) return;
-    const imageData = await getForceRandomImage();
-    await handleLoadImage(imageData);
-    const history = await getRandomHistory();
-    await loadHistory(history, 'random');
+    const res = await runOp(() => getForceRandomImage());
+    if (!res) return;
+    await handleLoadImage(res);
+    const hist = await runOp(() => getRandomHistory());
+    if (hist) await loadHistory(hist, 'random');
   };
 
   const handlePrevFolder = async () => {
     if (isIndexing) return;
     if (!(await ensureFolderSelected())) return;
-    await getPrevFolder();
+    const folderInfo = await runOp(() => getPrevFolder());
+    if (!folderInfo) return;
     await loadFolderHistory();
-    const imageData = await getCurrentImage();
+    const imageData = await runOp(() => getCurrentImage());
+    if (!imageData) return;
     await handleLoadImage(imageData);
-    const history = await getNormalHistory();
-    await loadHistory(history, 'normal');
+    const savedMode = getFolderHistoryMode(folderInfo.id);
+    const history = savedMode === 'normal' ? await runOp(() => getNormalHistory()) : await runOp(() => getRandomHistory());
+    if (history) await loadHistory(history, savedMode);
   };
 
   const handleReindexFolder = async () => {
@@ -435,31 +537,36 @@ export default function App() {
       setIsIndexing(true);
       setIndexingLogs(['indexing:start reindex-current-folder']);
     }
-
-    try {
-      await reindexCurrentFolder();
-      await loadFolderHistory();
-      const imageData = await getCurrentImage();
-      await handleLoadImage(imageData);
-      const history = await getNormalHistory();
-      await loadHistory(history, 'normal');
-      endIndexingUi(true);
-    } catch (err) {
-      appendIndexLog(`error:${formatError(err)}`);
+ 
+    const folderResult = await runOp(() => reindexCurrentFolder());
+    if (!folderResult) {
       endIndexingUi(false);
-      throw err;
+      return;
     }
+    await loadFolderHistory();
+    const imageData = await runOp(() => getCurrentImage());
+    if (!imageData) {
+      endIndexingUi(false);
+      return;
+    }
+    await handleLoadImage(imageData);
+    const history = activeHistoryMode === 'normal' ? await runOp(() => getNormalHistory()) : await runOp(() => getRandomHistory());
+    if (history) await loadHistory(history, activeHistoryMode);
+    endIndexingUi(true);
   };
 
   const handleNextFolder = async () => {
     if (isIndexing) return;
     if (!(await ensureFolderSelected())) return;
-    await getNextFolder();
+    const folderInfo = await runOp(() => getNextFolder());
+    if (!folderInfo) return;
     await loadFolderHistory();
-    const imageData = await getCurrentImage();
+    const imageData = await runOp(() => getCurrentImage());
+    if (!imageData) return;
     await handleLoadImage(imageData);
-    const history = await getNormalHistory();
-    await loadHistory(history, 'normal');
+    const savedMode = getFolderHistoryMode(folderInfo.id);
+    const history = savedMode === 'normal' ? await runOp(() => getNormalHistory()) : await runOp(() => getRandomHistory());
+    if (history) await loadHistory(history, savedMode);
   };
 
   const handleFullWipe = async () => {
@@ -475,37 +582,41 @@ export default function App() {
   const handlePrevImage = async () => {
     if (isIndexing) return;
     if (!(await ensureFolderSelected())) return;
-    const imageData = await getPrevImage();
-    await handleLoadImage(imageData);
-    const history = await getNormalHistory();
-    await loadHistory(history, 'normal');
+    const res = await runOp(() => getPrevImage());
+    if (!res) return;
+    await handleLoadImage(res);
+    const hist = await runOp(() => getNormalHistory());
+    if (hist) await loadHistory(hist, 'normal');
   };
 
   const handleNextImage = async () => {
     if (isIndexing) return;
     if (!(await ensureFolderSelected())) return;
-    const imageData = await getNextImage();
-    await handleLoadImage(imageData);
-    const history = await getNormalHistory();
-    await loadHistory(history, 'normal');
+    const res = await runOp(() => getNextImage());
+    if (!res) return;
+    await handleLoadImage(res);
+    const hist = await runOp(() => getNormalHistory());
+    if (hist) await loadHistory(hist, 'normal');
   };
 
   const handlePrevRandomImage = async () => {
     if (isIndexing) return;
     if (!(await ensureFolderSelected())) return;
-    const imageData = await getPrevRandomImage();
-    await handleLoadImage(imageData);
-    const history = await getRandomHistory();
-    await loadHistory(history, 'random');
+    const res = await runOp(() => getPrevRandomImage());
+    if (!res) return;
+    await handleLoadImage(res);
+    const hist = await runOp(() => getRandomHistory());
+    if (hist) await loadHistory(hist, 'random');
   };
 
   const handleNextRandomImage = async () => {
     if (isIndexing) return;
     if (!(await ensureFolderSelected())) return;
-    const imageData = await getNextRandomImage();
-    await handleLoadImage(imageData);
-    const history = await getRandomHistory();
-    await loadHistory(history, 'random');
+    const res = await runOp(() => getNextRandomImage());
+    if (!res) return;
+    await handleLoadImage(res);
+    const hist = await runOp(() => getRandomHistory());
+    if (hist) await loadHistory(hist, 'random');
   };
 
   const handleResetRandomHistory = async () => {
@@ -926,6 +1037,30 @@ export default function App() {
           style={uiHideToggleButtonStyle}
         />
       </div>
+
+      {toast.visible && (
+        <div
+          data-testid="toast"
+          style={{
+            position: 'absolute',
+            left: '10px',
+            bottom: isIndexing ? '200px' : '10px',
+            maxWidth: '400px',
+            padding: '10px 16px',
+            background: 'rgba(17, 19, 29, 0.95)',
+            border: '1px solid #f7768e',
+            borderRadius: '4px',
+            color: '#f7768e',
+            fontFamily: 'system-ui, -apple-system, sans-serif',
+            fontSize: '13px',
+            fontWeight: 500,
+            zIndex: 10,
+            boxShadow: '0 4px 12px rgba(0, 0, 0, 0.3)',
+          }}
+        >
+          {toast.message}
+        </div>
+      )}
 
       {isIndexing && (
         <div

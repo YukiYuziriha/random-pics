@@ -3,20 +3,6 @@ use serde::{Deserialize, Serialize};
 use std::sync::{Arc, RwLock};
 use tauri::{AppHandle, Emitter, State};
 
-const SAFE_ERROR_MESSAGES: &[&str] = &[
-    "ImageLoader not initialized",
-    "internal error",
-    "no folder selected",
-    "no current folder set",
-    "no images available",
-    "no images found in folder",
-    "image not found",
-    "invalid folder path",
-    "folder path is not a directory",
-    "folder path is unreadable",
-    "invalid timer flow mode",
-];
-
 pub type ImageLoaderState = Arc<RwLock<Option<Arc<ImageLoader>>>>;
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -68,12 +54,28 @@ pub struct ImageState {
 }
 
 #[derive(Debug, Serialize)]
+pub struct ImageResponse {
+    pub data: Vec<u8>,
+    pub folder: Option<FolderInfo>,
+    pub auto_switched_folder: bool,
+}
+
+#[derive(Debug, Serialize)]
 pub struct CommandError {
     pub message: String,
 }
 
 impl From<Box<dyn std::error::Error>> for CommandError {
     fn from(err: Box<dyn std::error::Error>) -> Self {
+        let raw = err.to_string();
+        Self {
+            message: sanitize_error_message(&raw),
+        }
+    }
+}
+
+impl From<rusqlite::Error> for CommandError {
+    fn from(err: rusqlite::Error) -> Self {
         let raw = err.to_string();
         Self {
             message: sanitize_error_message(&raw),
@@ -96,11 +98,15 @@ impl CommandError {
 }
 
 fn sanitize_error_message(raw: &str) -> String {
-    if SAFE_ERROR_MESSAGES.contains(&raw) {
-        raw.to_string()
-    } else {
-        "internal error".to_string()
+    // Explicit error mapping for known issues
+    if raw.contains("FOREIGN KEY constraint failed") {
+        return "database constraint failed - try resetting history or reindexing".to_string();
     }
+    if raw.contains("query returned no rows") {
+        return "no data found - folder or image may have been deleted".to_string();
+    }
+    // Pass through all other errors as-is
+    raw.to_string()
 }
 
 fn get_loader(state: &State<ImageLoaderState>) -> Result<Arc<ImageLoader>, CommandError> {
@@ -206,45 +212,75 @@ pub async fn reindex_current_folder(
 #[tauri::command]
 pub async fn get_current_image(
     state: State<'_, ImageLoaderState>,
-) -> Result<Vec<u8>, CommandError> {
+) -> Result<ImageResponse, CommandError> {
     let loader = get_loader(&state)?;
-    loader.get_current_image_or_first().await.map_err(Into::into)
+    let (data, auto_switched) = loader.get_current_image_or_first().await.map_err(CommandError::from)?;
+    let folder = loader.get_current_folder_id_and_path()
+        .ok()
+        .flatten()
+        .map(|(id, path)| FolderInfo { id, path });
+    Ok(ImageResponse { data, folder, auto_switched_folder: auto_switched })
 }
 
 #[tauri::command]
-pub async fn get_next_image(state: State<'_, ImageLoaderState>) -> Result<Vec<u8>, CommandError> {
+pub async fn get_next_image(state: State<'_, ImageLoaderState>) -> Result<ImageResponse, CommandError> {
     let loader = get_loader(&state)?;
-    loader.get_next_image().await.map_err(Into::into)
+    let (data, auto_switched) = loader.get_next_image().await.map_err(CommandError::from)?;
+    let folder = loader.get_current_folder_id_and_path()
+        .ok()
+        .flatten()
+        .map(|(id, path)| FolderInfo { id, path });
+    Ok(ImageResponse { data, folder, auto_switched_folder: auto_switched })
 }
 
 #[tauri::command]
-pub async fn get_prev_image(state: State<'_, ImageLoaderState>) -> Result<Vec<u8>, CommandError> {
+pub async fn get_prev_image(state: State<'_, ImageLoaderState>) -> Result<ImageResponse, CommandError> {
     let loader = get_loader(&state)?;
-    loader.get_prev_image().await.map_err(Into::into)
+    let (data, auto_switched) = loader.get_prev_image().await.map_err(CommandError::from)?;
+    let folder = loader.get_current_folder_id_and_path()
+        .ok()
+        .flatten()
+        .map(|(id, path)| FolderInfo { id, path });
+    Ok(ImageResponse { data, folder, auto_switched_folder: auto_switched })
 }
 
 #[tauri::command]
 pub async fn get_next_random_image(
     state: State<'_, ImageLoaderState>,
-) -> Result<Vec<u8>, CommandError> {
+) -> Result<ImageResponse, CommandError> {
     let loader = get_loader(&state)?;
-    loader.get_next_random_image().await.map_err(Into::into)
+    let (data, auto_switched) = loader.get_next_random_image().await.map_err(CommandError::from)?;
+    let folder = loader.get_current_folder_id_and_path()
+        .ok()
+        .flatten()
+        .map(|(id, path)| FolderInfo { id, path });
+    Ok(ImageResponse { data, folder, auto_switched_folder: auto_switched })
 }
 
 #[tauri::command]
 pub async fn get_prev_random_image(
     state: State<'_, ImageLoaderState>,
-) -> Result<Vec<u8>, CommandError> {
+) -> Result<ImageResponse, CommandError> {
     let loader = get_loader(&state)?;
-    loader.get_prev_random_image().await.map_err(Into::into)
+    let (data, auto_switched) = loader.get_prev_random_image().await.map_err(CommandError::from)?;
+    let folder = loader.get_current_folder_id_and_path()
+        .ok()
+        .flatten()
+        .map(|(id, path)| FolderInfo { id, path });
+    Ok(ImageResponse { data, folder, auto_switched_folder: auto_switched })
 }
 
 #[tauri::command]
 pub async fn get_force_random_image(
     state: State<'_, ImageLoaderState>,
-) -> Result<Vec<u8>, CommandError> {
+) -> Result<ImageResponse, CommandError> {
     let loader = get_loader(&state)?;
-    loader.get_force_random_image(true).await.map_err(Into::into)
+    let (data, auto_switched) = loader.get_force_random_image(true).await.map_err(CommandError::from)?;
+    let folder = loader.get_current_folder_id_and_path()
+        .ok()
+        .flatten()
+        .map(|(id, path)| FolderInfo { id, path });
+    Ok(ImageResponse { data, folder, auto_switched_folder: auto_switched })
 }
 
 #[tauri::command]
@@ -334,16 +370,65 @@ pub async fn set_folder_by_index(
 pub async fn set_normal_image_by_index(
     index: i64,
     state: State<'_, ImageLoaderState>,
-) -> Result<Vec<u8>, CommandError> {
+) -> Result<ImageResponse, CommandError> {
     let loader = get_loader(&state)?;
-    loader.set_normal_image_by_index(index).await.map_err(Into::into)
+    let (data, auto_switched) = loader.set_normal_image_by_index(index).await.map_err(CommandError::from)?;
+    let folder = loader.get_current_folder_id_and_path()
+        .ok()
+        .flatten()
+        .map(|(id, path)| FolderInfo { id, path });
+    Ok(ImageResponse { data, folder, auto_switched_folder: auto_switched })
 }
 
 #[tauri::command]
 pub async fn set_random_image_by_index(
     index: i64,
     state: State<'_, ImageLoaderState>,
-) -> Result<Vec<u8>, CommandError> {
+) -> Result<ImageResponse, CommandError> {
     let loader = get_loader(&state)?;
-    loader.set_random_image_by_index(index).await.map_err(Into::into)
+    let (data, auto_switched) = loader.set_random_image_by_index(index).await.map_err(CommandError::from)?;
+    let folder = loader.get_current_folder_id_and_path()
+        .ok()
+        .flatten()
+        .map(|(id, path)| FolderInfo { id, path });
+    Ok(ImageResponse { data, folder, auto_switched_folder: auto_switched })
+}
+
+#[tauri::command]
+pub async fn get_current_folder(
+    state: State<'_, ImageLoaderState>,
+) -> Result<Option<FolderInfo>, CommandError> {
+    let loader = get_loader(&state)?;
+    match loader.get_current_folder_id_and_path()? {
+        Some((id, path)) => Ok(Some(FolderInfo { id, path })),
+        None => Ok(None),
+    }
+}
+
+#[tauri::command]
+pub async fn delete_folder(
+    folder_id: i64,
+    state: State<'_, ImageLoaderState>,
+) -> Result<(), CommandError> {
+    let loader = get_loader(&state)?;
+    loader.delete_folder_by_id(folder_id)?;
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn cleanup_stale_folders(
+    state: State<'_, ImageLoaderState>,
+) -> Result<Vec<String>, CommandError> {
+    let loader = get_loader(&state)?;
+    let history = loader.get_folder_history()?;
+    let mut removed_paths = Vec::new();
+    
+    for (folder_id, path, _, _) in history {
+        if !std::path::Path::new(&path).exists() {
+            loader.delete_folder_by_id(folder_id)?;
+            removed_paths.push(path);
+        }
+    }
+    
+    Ok(removed_paths)
 }
