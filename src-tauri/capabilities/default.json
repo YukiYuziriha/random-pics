@@ -5,14 +5,14 @@
   "windows": [
     "main"
   ],
-  "remote": {
-    "urls": [
-      "http://127.0.0.1:3000/*",
-      "http://localhost:3000/*"
-    ]
-  },
   "permissions": [
-    "core:default",
-    "dialog:allow-open"
+    "core:event:allow-listen",
+    "core:event:allow-unlisten",
+    "core:window:allow-is-fullscreen",
+    "core:window:allow-set-fullscreen",
+    "dialog:allow-open",
+    "global-shortcut:allow-register",
+    "global-shortcut:allow-unregister",
+    "global-shortcut:allow-is-registered"
   ]
 }

@@ -5,6 +5,7 @@ type FolderControlsProps = {
   onPickFolder: () => void | Promise<void>;
   onReindexFolder: () => void | Promise<void>;
   onNextFolder: () => void | Promise<void>;
+  disabled?: boolean;
 };
 
 export function FolderControls({
@@ -12,6 +13,7 @@ export function FolderControls({
   onPickFolder,
   onReindexFolder,
   onNextFolder,
+  disabled = false,
 }: FolderControlsProps) {
   return (
     <div
@@ -27,10 +29,10 @@ export function FolderControls({
         background: '#1f2335',
       }}
     >
-      <ActionButton label="prev-folder" onClick={onPrevFolder} />
-      <ActionButton label="pick-folder" onClick={onPickFolder} />
-      <ActionButton label="reindex-folder" onClick={onReindexFolder} />
-      <ActionButton label="next-folder" onClick={onNextFolder} />
+      <ActionButton label="prev-folder" onClick={onPrevFolder} disabled={disabled} />
+      <ActionButton label="pick-folder" onClick={onPickFolder} disabled={disabled} />
+      <ActionButton label="reindex-folder" onClick={onReindexFolder} disabled={disabled} />
+      <ActionButton label="next-folder" onClick={onNextFolder} disabled={disabled} />
     </div>
   );
 }

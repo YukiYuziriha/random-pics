@@ -18,6 +18,7 @@ type ImageControlsProps = {
   remainingSeconds: number;
   isRunning: boolean;
   timerFlowMode: 'random' | 'normal';
+  disabled?: boolean;
 };
 
 export function ImageControls({
@@ -38,6 +39,7 @@ export function ImageControls({
   remainingSeconds,
   isRunning,
   timerFlowMode,
+  disabled = false,
 }: ImageControlsProps) {
   return (
     <div
@@ -84,6 +86,7 @@ export function ImageControls({
           <span>[</span>
           <button
             onClick={onToggleStartStop}
+            disabled={disabled}
             style={{
               border: 'none',
               background: 'transparent',
@@ -92,7 +95,8 @@ export function ImageControls({
               fontSize: '12px',
               letterSpacing: '0.04em',
               padding: 0,
-              cursor: 'pointer',
+              cursor: disabled ? 'not-allowed' : 'pointer',
+              opacity: disabled ? 0.55 : 1,
             }}
           >
             {isRunning ? 'stop' : 'start'}
@@ -103,6 +107,7 @@ export function ImageControls({
             inputMode="numeric"
             pattern="[0-9]*"
             value={initialSeconds}
+            disabled={disabled}
             onChange={(e) => {
               onInitialSecondsChange(Number(e.target.value));
             }}
@@ -141,6 +146,7 @@ export function ImageControls({
           <span>[</span>
           <button
             onClick={onTogglePausePlay}
+            disabled={disabled}
             style={{
               border: 'none',
               background: 'transparent',
@@ -149,7 +155,8 @@ export function ImageControls({
               fontSize: '12px',
               letterSpacing: '0.04em',
               padding: 0,
-              cursor: 'pointer',
+              cursor: disabled ? 'not-allowed' : 'pointer',
+              opacity: disabled ? 0.55 : 1,
             }}
           >
             {isRunning ? 'pause' : 'play'}
@@ -160,6 +167,7 @@ export function ImageControls({
             inputMode="numeric"
             pattern="[0-9]*"
             value={remainingSeconds}
+            disabled={disabled}
             onChange={(e) => {
               onRemainingSecondsChange(Number(e.target.value));
             }}
@@ -181,6 +189,7 @@ export function ImageControls({
 
         <button
           onClick={onToggleTimerFlowMode}
+          disabled={disabled}
           style={{
             background: '#24283b',
             color: '#c0caf5',
@@ -190,11 +199,12 @@ export function ImageControls({
             fontSize: '12px',
             letterSpacing: '0.04em',
             minHeight: '28px',
-            cursor: 'pointer',
+            cursor: disabled ? 'not-allowed' : 'pointer',
             padding: '5px 8px',
             display: 'flex',
             alignItems: 'center',
             gap: '4px',
+            opacity: disabled ? 0.55 : 1,
           }}
         >
           <span style={{ color: timerFlowMode === 'random' ? '#f7768e' : '#8f93aa' }}>random</span>
@@ -215,9 +225,9 @@ export function ImageControls({
           flexWrap: 'wrap',
         }}
       >
-        <ActionButton label="vertical-mirror" onClick={onToggleVerticalMirror} />
-        <ActionButton label="horizontal-mirror" onClick={onToggleHorizontalMirror} />
-        <ActionButton label="greyscale" onClick={onToggleGreyscale} />
+        <ActionButton label="vertical-mirror" onClick={onToggleVerticalMirror} disabled={disabled} />
+        <ActionButton label="horizontal-mirror" onClick={onToggleHorizontalMirror} disabled={disabled} />
+        <ActionButton label="greyscale" onClick={onToggleGreyscale} disabled={disabled} />
       </div>
 
       <div
@@ -232,11 +242,11 @@ export function ImageControls({
           flexWrap: 'wrap',
         }}
       >
-        <ActionButton label="prev" onClick={onPrev} />
-        <ActionButton label="next" onClick={onNext} />
-        <ActionButton label="prev-random" onClick={onPrevRandom} />
-        <ActionButton label="new-random" onClick={onForceRandom} />
-        <ActionButton label="next-random" onClick={onNextRandom} />
+        <ActionButton label="prev" onClick={onPrev} disabled={disabled} />
+        <ActionButton label="next" onClick={onNext} disabled={disabled} />
+        <ActionButton label="prev-random" onClick={onPrevRandom} disabled={disabled} />
+        <ActionButton label="new-random" onClick={onForceRandom} disabled={disabled} />
+        <ActionButton label="next-random" onClick={onNextRandom} disabled={disabled} />
       </div>
     </div>
   );
