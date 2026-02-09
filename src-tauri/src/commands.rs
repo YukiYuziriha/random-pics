@@ -171,7 +171,8 @@ pub async fn get_folder_history(
             Some(id) => history
                 .iter()
                 .position(|(fid, _, _, _)| *fid == id)
-                .unwrap_or(usize::MAX) as i64,
+                .map(|index| index as i64)
+                .unwrap_or(-1),
             None => -1,
         }
     };
