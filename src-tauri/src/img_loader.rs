@@ -1,5 +1,4 @@
 use crate::db::Db;
-use image::ImageReader;
 use rand::seq::SliceRandom;
 use rusqlite::{params, OptionalExtension};
 use walkdir::WalkDir;
@@ -375,7 +374,8 @@ impl ImageLoader {
             return Ok(folder_id);
         }
 
-        let supported_extensions = ["jpeg", "jpg", "png", "gif", "webp"];
+        let mut paths: Vec<String> = Vec::new();
+        paths.reserve(1024);
 
         for entry in WalkDir::new(&folder_path)
             .follow_links(false)
@@ -385,11 +385,34 @@ impl ImageLoader {
         {
             let path = entry.path();
             if let Some(ext) = path.extension().and_then(|e| e.to_str()) {
-                if supported_extensions.contains(&ext.to_lowercase().as_str()) {
-                    let path_str = path.to_str().ok_or("invalid path")?;
-                    self.insert_image(path_str, folder_id)?;
+                if ext.eq_ignore_ascii_case("jpeg")
+                    || ext.eq_ignore_ascii_case("jpg")
+                    || ext.eq_ignore_ascii_case("png")
+                    || ext.eq_ignore_ascii_case("gif")
+                    || ext.eq_ignore_ascii_case("webp")
+                {
+                    if let Some(path_str) = path.to_str() {
+                        paths.push(path_str.to_string());
+                    }
                 }
             }
+        }
+
+        if !paths.is_empty() {
+            let mut conn = self.db.conn();
+            let tx = conn.transaction()?;
+            tx.execute("PRAGMA journal_mode = WAL", [])?;
+            tx.execute("PRAGMA synchronous = NORMAL", [])?;
+            {
+                let mut stmt = tx.prepare(
+                    "INSERT OR IGNORE INTO images (path, folder_id) VALUES (?1, ?2)",
+                )?;
+                for path in &paths {
+                    stmt.execute(params![path, folder_id])?;
+                }
+            }
+            tx.execute("PRAGMA synchronous = FULL", [])?;
+            tx.commit()?;
         }
 
         let after_count = self.count_images(folder_id)?;
@@ -416,15 +439,8 @@ impl ImageLoader {
         let path = self.get_image_path(image_id)?;
         self.set_last_image_id(Some(image_id))?;
 
-        let img = ImageReader::open(&path)?.with_guessed_format()?.decode()?;
-
-        let mut buffer = Vec::new();
-        img.write_to(
-            &mut std::io::Cursor::new(&mut buffer),
-            image::ImageFormat::Jpeg,
-        )?;
-
-        Ok(buffer)
+        let data = std::fs::read(&path)?;
+        Ok(data)
     }
 
     pub async fn get_next_image(&self) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
