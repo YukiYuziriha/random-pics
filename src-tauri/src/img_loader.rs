@@ -1,7 +1,7 @@
 use crate::db::Db;
 use image::ImageReader;
 use rand::seq::SliceRandom;
-use rusqlite::params;
+use rusqlite::{params, OptionalExtension};
 use walkdir::WalkDir;
 
 pub struct ImageLoader {
@@ -272,11 +272,15 @@ impl ImageLoader {
     }
 
     fn lap_has(&self, folder_id: i64, image_id: i64) -> Result<bool, Box<dyn std::error::Error>> {
-        let exists: Option<i64> = self.db.conn().query_row(
-            "SELECT 1 FROM current_lap WHERE folder_id = ?1 AND image_id = ?2 LIMIT 1",
-            params![folder_id, image_id],
-            |row| row.get(0),
-        )?;
+        let exists: Option<i64> = self
+            .db
+            .conn()
+            .query_row(
+                "SELECT 1 FROM current_lap WHERE folder_id = ?1 AND image_id = ?2 LIMIT 1",
+                params![folder_id, image_id],
+                |row| row.get(0),
+            )
+            .optional()?;
         Ok(exists.is_some())
     }
 
@@ -730,12 +734,19 @@ impl ImageLoader {
     }
 
     pub fn full_wipe(&self) -> Result<(), Box<dyn std::error::Error>> {
-        self.db.conn().execute("DELETE FROM folders", [])?;
-        self.db.conn().execute("DELETE FROM images", [])?;
-        self.db.conn().execute("DELETE FROM random_history", [])?;
-        self.db.conn().execute("DELETE FROM current_lap", [])?;
-        self.set_current_folder_id(None)?;
-        self.set_last_image_id(None)?;
+        let mut conn = self.db.conn();
+        let tx = conn.transaction()?;
+
+        tx.execute("DELETE FROM random_history", [])?;
+        tx.execute("DELETE FROM current_lap", [])?;
+        tx.execute("DELETE FROM images", [])?;
+        tx.execute("DELETE FROM folders", [])?;
+        tx.execute(
+            "UPDATE state SET current_folder_id = NULL, last_image_id = NULL WHERE id = 1",
+            [],
+        )?;
+
+        tx.commit()?;
         Ok(())
     }
 

@@ -160,7 +160,7 @@ Deliverable:
   - src/App.tsx - All fetch calls replaced with invoke
   - src/apiClient.ts - Unified invoke-based API client
 
-## Phase 3.5 - Dual-path parity gate
+## Phase 3.5 - Dual-path parity gate ✓ COMPLETE
 
 1. Run full behavior suite against both implementations in CI:
    - Bun HTTP (legacy),
@@ -169,7 +169,9 @@ Deliverable:
 3. Track intentional behavior changes explicitly in migration notes; otherwise parity is mandatory.
 
 Deliverable:
-- CI-enforced proof that Rust path preserves existing behavior.
+- CI-enforced proof that Rust path preserves existing behavior. ✓
+  - `bun run test:rust-bridge` passing: 18/18 scenarios
+  - Rust test bridge parity blockers resolved (`full_wipe` FK order + random lap no-row handling)
 
 ## Phase 4 - Packaging/runtime switch
 
