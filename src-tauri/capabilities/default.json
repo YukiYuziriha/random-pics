@@ -8,6 +8,8 @@
   "permissions": [
     "core:event:allow-listen",
     "core:event:allow-unlisten",
+    "core:window:allow-is-fullscreen",
+    "core:window:allow-set-fullscreen",
     "dialog:allow-open",
     "global-shortcut:allow-register",
     "global-shortcut:allow-unregister",

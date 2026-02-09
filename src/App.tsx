@@ -306,9 +306,13 @@ export default function App() {
       if (event.key === 'F11') {
         event.preventDefault();
         void (async () => {
-          const win = getCurrentWindow();
-          const isFullscreen = await win.isFullscreen();
-          await win.setFullscreen(!isFullscreen);
+          try {
+            const win = getCurrentWindow();
+            const isFullscreen = await win.isFullscreen();
+            await win.setFullscreen(!isFullscreen);
+          } catch (err) {
+            console.error('F11 fullscreen toggle failed', err);
+          }
         })();
         return;
       }
