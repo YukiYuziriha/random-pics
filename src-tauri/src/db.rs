@@ -9,12 +9,14 @@ pub struct Db {
 
 impl Db {
     pub fn open(db_path: PathBuf) -> Result<Self> {
+        eprintln!("[RUST] Db::open: opening database at {}", db_path.display());
         let conn = Connection::open(db_path)?;
         let db = Db {
             conn: Arc::new(std::sync::Mutex::new(conn)),
         };
         db.init_schema()?;
         db.run_migrations()?;
+        eprintln!("[RUST] Db::open: database opened successfully");
         Ok(db)
     }
 

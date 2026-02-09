@@ -1,8 +1,8 @@
 use crate::db::Db;
+use image::ImageReader;
 use rand::seq::SliceRandom;
 use rusqlite::params;
 use walkdir::WalkDir;
-use image::ImageReader;
 
 pub struct ImageLoader {
     db: Db,
@@ -16,7 +16,10 @@ impl ImageLoader {
         Self { db }
     }
 
-    fn get_current_folder_id_and_path(&self) -> Result<Option<(i64, String)>, Box<dyn std::error::Error>> {
+    fn get_current_folder_id_and_path(
+        &self,
+    ) -> Result<Option<(i64, String)>, Box<dyn std::error::Error>> {
+        eprintln!("[RUST] get_current_folder_id_and_path: querying state table");
         let current = self.db.conn().query_row(
             "SELECT current_folder_id FROM state WHERE id = 1",
             [],
@@ -26,6 +29,10 @@ impl ImageLoader {
             },
         )?;
 
+        eprintln!(
+            "[RUST] get_current_folder_id_and_path: current_folder_id = {:?}",
+            current
+        );
         match current {
             Some(folder_id) => {
                 let path: String = self.db.conn().query_row(
@@ -33,21 +40,30 @@ impl ImageLoader {
                     params![folder_id],
                     |row| row.get(0),
                 )?;
+                eprintln!(
+                    "[RUST] get_current_folder_id_and_path: returning ({}, {})",
+                    folder_id, path
+                );
                 Ok(Some((folder_id, path)))
             }
-            None => Ok(None),
+            None => {
+                eprintln!("[RUST] get_current_folder_id_and_path: returning None");
+                Ok(None)
+            }
         }
     }
 
     fn get_image_ids(&self, folder_id: i64) -> Result<Vec<i64>, Box<dyn std::error::Error>> {
-        self.db.with_conn(|conn| {
-            let mut stmt = conn.prepare(
-                "SELECT id FROM images WHERE folder_id = ?1 ORDER BY id",
-            )?;
-            let ids = stmt.query_map(params![folder_id], |row| row.get(0))?
-                .collect::<Result<Vec<i64>, _>>()?;
-            Ok::<Vec<i64>, rusqlite::Error>(ids)
-        }).map_err(|e| e.into())
+        self.db
+            .with_conn(|conn| {
+                let mut stmt =
+                    conn.prepare("SELECT id FROM images WHERE folder_id = ?1 ORDER BY id")?;
+                let ids = stmt
+                    .query_map(params![folder_id], |row| row.get(0))?
+                    .collect::<Result<Vec<i64>, _>>()?;
+                Ok::<Vec<i64>, rusqlite::Error>(ids)
+            })
+            .map_err(|e| e.into())
     }
 
     fn count_images(&self, folder_id: i64) -> Result<i64, Box<dyn std::error::Error>> {
@@ -68,7 +84,11 @@ impl ImageLoader {
         Ok(index)
     }
 
-    fn set_current_folder_index(&self, folder_id: i64, index: i64) -> Result<(), Box<dyn std::error::Error>> {
+    fn set_current_folder_index(
+        &self,
+        folder_id: i64,
+        index: i64,
+    ) -> Result<(), Box<dyn std::error::Error>> {
         self.db.conn().execute(
             "UPDATE folders SET current_index = ?1 WHERE id = ?2",
             params![index, folder_id],
@@ -76,7 +96,10 @@ impl ImageLoader {
         Ok(())
     }
 
-    fn get_current_folder_random_index(&self, folder_id: i64) -> Result<i64, Box<dyn std::error::Error>> {
+    fn get_current_folder_random_index(
+        &self,
+        folder_id: i64,
+    ) -> Result<i64, Box<dyn std::error::Error>> {
         let index: i64 = self.db.conn().query_row(
             "SELECT current_random_index FROM folders WHERE id = ?1",
             params![folder_id],
@@ -85,7 +108,11 @@ impl ImageLoader {
         Ok(index)
     }
 
-    fn set_current_folder_random_index(&self, folder_id: i64, index: i64) -> Result<(), Box<dyn std::error::Error>> {
+    fn set_current_folder_random_index(
+        &self,
+        folder_id: i64,
+        index: i64,
+    ) -> Result<(), Box<dyn std::error::Error>> {
         self.db.conn().execute(
             "UPDATE folders SET current_random_index = ?1 WHERE id = ?2",
             params![index, folder_id],
@@ -102,7 +129,10 @@ impl ImageLoader {
         Ok(path)
     }
 
-    fn get_image_folder_id(&self, image_id: i64) -> Result<Option<i64>, Box<dyn std::error::Error>> {
+    fn get_image_folder_id(
+        &self,
+        image_id: i64,
+    ) -> Result<Option<i64>, Box<dyn std::error::Error>> {
         let folder_id: Option<i64> = self.db.conn().query_row(
             "SELECT folder_id FROM images WHERE id = ?1",
             params![image_id],
@@ -155,7 +185,11 @@ impl ImageLoader {
         Ok(max_index.unwrap_or(-1))
     }
 
-    fn random_history_at(&self, folder_id: i64, index: i64) -> Result<Option<i64>, Box<dyn std::error::Error>> {
+    fn random_history_at(
+        &self,
+        folder_id: i64,
+        index: i64,
+    ) -> Result<Option<i64>, Box<dyn std::error::Error>> {
         if index < 0 {
             return Ok(None);
         }
@@ -167,7 +201,12 @@ impl ImageLoader {
         Ok(image_id)
     }
 
-    fn random_history_insert(&self, folder_id: i64, order_index: i64, image_id: i64) -> Result<(), Box<dyn std::error::Error>> {
+    fn random_history_insert(
+        &self,
+        folder_id: i64,
+        order_index: i64,
+        image_id: i64,
+    ) -> Result<(), Box<dyn std::error::Error>> {
         self.db.conn().execute(
             "INSERT INTO random_history (folder_id, order_index, image_id) VALUES (?1, ?2, ?3)",
             params![folder_id, order_index, image_id],
@@ -175,7 +214,10 @@ impl ImageLoader {
         Ok(())
     }
 
-    fn random_history_shift_up_safe(&self, folder_id: i64) -> Result<(), Box<dyn std::error::Error>> {
+    fn random_history_shift_up_safe(
+        &self,
+        folder_id: i64,
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let mut conn = self.db.conn();
         let tx = conn.transaction()?;
         tx.execute(
@@ -190,14 +232,22 @@ impl ImageLoader {
         Ok(())
     }
 
-    fn append_random_history(&self, folder_id: i64, image_id: i64) -> Result<i64, Box<dyn std::error::Error>> {
+    fn append_random_history(
+        &self,
+        folder_id: i64,
+        image_id: i64,
+    ) -> Result<i64, Box<dyn std::error::Error>> {
         let max_index = self.random_history_max_index(folder_id)?;
         let next_index = max_index + 1;
         self.random_history_insert(folder_id, next_index, image_id)?;
         Ok(next_index)
     }
 
-    fn prepend_random_history(&self, folder_id: i64, image_id: i64) -> Result<i64, Box<dyn std::error::Error>> {
+    fn prepend_random_history(
+        &self,
+        folder_id: i64,
+        image_id: i64,
+    ) -> Result<i64, Box<dyn std::error::Error>> {
         self.random_history_shift_up_safe(folder_id)?;
         self.random_history_insert(folder_id, 0, image_id)?;
         Ok(0)
@@ -246,7 +296,11 @@ impl ImageLoader {
         Ok(())
     }
 
-    fn ensure_lap_capacity(&self, folder_id: i64, total_images: i64) -> Result<(), Box<dyn std::error::Error>> {
+    fn ensure_lap_capacity(
+        &self,
+        folder_id: i64,
+        total_images: i64,
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let count = self.lap_count(folder_id)?;
         if count >= total_images {
             self.lap_clear(folder_id)?;
@@ -268,11 +322,16 @@ impl ImageLoader {
         Ok(id)
     }
 
-    fn set_current_folder_id(&self, folder_id: Option<i64>) -> Result<(), Box<dyn std::error::Error>> {
-        self.db.conn().execute(
+    fn set_current_folder_id(
+        &self,
+        folder_id: Option<i64>,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        eprintln!("[RUST] set_current_folder_id: setting to {:?}", folder_id);
+        let rows = self.db.conn().execute(
             "UPDATE state SET current_folder_id = ?1 WHERE id = 1",
             params![folder_id],
         )?;
+        eprintln!("[RUST] set_current_folder_id: updated {} rows", rows);
         Ok(())
     }
 
@@ -292,7 +351,10 @@ impl ImageLoader {
         Ok(())
     }
 
-    pub fn set_current_folder_by_path(&self, path: &str) -> Result<i64, Box<dyn std::error::Error>> {
+    pub fn set_current_folder_by_path(
+        &self,
+        path: &str,
+    ) -> Result<i64, Box<dyn std::error::Error>> {
         let added_at = chrono::Utc::now().to_rfc3339();
         let id = self.insert_folder(path, &added_at)?;
         self.set_current_folder_id(Some(id))?;
@@ -300,7 +362,8 @@ impl ImageLoader {
     }
 
     pub async fn ensure_images_indexed(&self) -> Result<i64, Box<dyn std::error::Error>> {
-        let (folder_id, folder_path) = self.get_current_folder_id_and_path()?
+        let (folder_id, folder_path) = self
+            .get_current_folder_id_and_path()?
             .ok_or("no folder selected")?;
 
         let count = self.count_images(folder_id)?;
@@ -333,22 +396,29 @@ impl ImageLoader {
         Ok(folder_id)
     }
 
-    pub async fn set_current_folder_and_index(&self, path: &str) -> Result<(i64, String), Box<dyn std::error::Error>> {
+    pub async fn set_current_folder_and_index(
+        &self,
+        path: &str,
+    ) -> Result<(i64, String), Box<dyn std::error::Error>> {
         let _id = self.set_current_folder_by_path(path)?;
         let folder_id = self.ensure_images_indexed().await?;
         Ok((folder_id, path.to_string()))
     }
 
-    pub async fn load_by_image_id(&self, image_id: i64) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
+    pub async fn load_by_image_id(
+        &self,
+        image_id: i64,
+    ) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
         let path = self.get_image_path(image_id)?;
         self.set_last_image_id(Some(image_id))?;
 
-        let img = ImageReader::open(&path)?
-            .with_guessed_format()?
-            .decode()?;
+        let img = ImageReader::open(&path)?.with_guessed_format()?.decode()?;
 
         let mut buffer = Vec::new();
-        img.write_to(&mut std::io::Cursor::new(&mut buffer), image::ImageFormat::Jpeg)?;
+        img.write_to(
+            &mut std::io::Cursor::new(&mut buffer),
+            image::ImageFormat::Jpeg,
+        )?;
 
         Ok(buffer)
     }
@@ -418,7 +488,10 @@ impl ImageLoader {
         self.load_by_image_id(image_id).await
     }
 
-    pub async fn get_force_random_image(&self, force_pointer_to_last: bool) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
+    pub async fn get_force_random_image(
+        &self,
+        force_pointer_to_last: bool,
+    ) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
         let folder_id = self.ensure_images_indexed().await?;
         let image_ids = self.get_image_ids(folder_id)?;
 
@@ -507,9 +580,9 @@ impl ImageLoader {
         };
 
         let paths = self.db.with_conn(|conn| {
-            let paths: Vec<String> = conn.prepare(
-                "SELECT path FROM images WHERE folder_id = ?1 ORDER BY id",
-            )?.query_map(params![current.0], |row| row.get(0))?
+            let paths: Vec<String> = conn
+                .prepare("SELECT path FROM images WHERE folder_id = ?1 ORDER BY id")?
+                .query_map(params![current.0], |row| row.get(0))?
                 .collect::<Result<Vec<String>, _>>()?;
             Ok(paths)
         })?;
@@ -551,19 +624,24 @@ impl ImageLoader {
         Ok(())
     }
 
-    pub fn get_folder_history(&self) -> Result<Vec<(i64, String, String)>, Box<dyn std::error::Error>> {
-        self.db.with_conn(|conn| {
-            let history: Vec<(i64, String, String)> = conn.prepare(
-                "SELECT id, path, added_at FROM folders ORDER BY added_at DESC",
-            )?.query_map([], |row| {
-                let id: i64 = row.get(0)?;
-                let path: String = row.get(1)?;
-                let added_at: String = row.get(2)?;
-                Ok((id, path, added_at))
-            })?.collect::<Result<Vec<_>, _>>()?;
+    pub fn get_folder_history(
+        &self,
+    ) -> Result<Vec<(i64, String, String)>, Box<dyn std::error::Error>> {
+        self.db
+            .with_conn(|conn| {
+                let history: Vec<(i64, String, String)> = conn
+                    .prepare("SELECT id, path, added_at FROM folders ORDER BY added_at DESC")?
+                    .query_map([], |row| {
+                        let id: i64 = row.get(0)?;
+                        let path: String = row.get(1)?;
+                        let added_at: String = row.get(2)?;
+                        Ok((id, path, added_at))
+                    })?
+                    .collect::<Result<Vec<_>, _>>()?;
 
-            Ok::<Vec<(i64, String, String)>, rusqlite::Error>(history)
-        }).map_err(|e| e.into())
+                Ok::<Vec<(i64, String, String)>, rusqlite::Error>(history)
+            })
+            .map_err(|e| e.into())
     }
 
     pub fn get_next_folder(&self) -> Result<Option<(i64, String)>, Box<dyn std::error::Error>> {
@@ -636,8 +714,11 @@ impl ImageLoader {
         }
     }
 
-    pub async fn reindex_current_folder(&self) -> Result<(i64, String), Box<dyn std::error::Error>> {
-        let (folder_id, folder_path) = self.get_current_folder_id_and_path()?
+    pub async fn reindex_current_folder(
+        &self,
+    ) -> Result<(i64, String), Box<dyn std::error::Error>> {
+        let (folder_id, folder_path) = self
+            .get_current_folder_id_and_path()?
             .ok_or("no current folder set")?;
 
         self.delete_images_by_folder_id(folder_id)?;
@@ -658,7 +739,9 @@ impl ImageLoader {
         Ok(())
     }
 
-    pub fn get_image_state(&self) -> Result<crate::commands::ImageState, Box<dyn std::error::Error>> {
+    pub fn get_image_state(
+        &self,
+    ) -> Result<crate::commands::ImageState, Box<dyn std::error::Error>> {
         let row = self.db.conn().query_row(
             "SELECT vertical_mirror, horizontal_mirror, greyscale, timer_flow_mode, show_folder_history_panel, show_top_controls, show_image_history_panel, show_bottom_controls, is_fullscreen_image FROM state WHERE id = 1",
             [],
@@ -680,7 +763,11 @@ impl ImageLoader {
             vertical_mirror: row.0 != 0,
             horizontal_mirror: row.1 != 0,
             greyscale: row.2 != 0,
-            timer_flow_mode: if row.3 == "normal" { "normal".to_string() } else { "random".to_string() },
+            timer_flow_mode: if row.3 == "normal" {
+                "normal".to_string()
+            } else {
+                "random".to_string()
+            },
             show_folder_history_panel: row.4 != 0,
             show_top_controls: row.5 != 0,
             show_image_history_panel: row.6 != 0,
@@ -689,7 +776,10 @@ impl ImageLoader {
         })
     }
 
-    pub fn set_image_state(&self, state: &crate::commands::ImageState) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn set_image_state(
+        &self,
+        state: &crate::commands::ImageState,
+    ) -> Result<(), Box<dyn std::error::Error>> {
         self.db.conn().execute(
             "UPDATE state SET vertical_mirror = ?1, horizontal_mirror = ?2, greyscale = ?3, timer_flow_mode = ?4, show_folder_history_panel = ?5, show_top_controls = ?6, show_image_history_panel = ?7, show_bottom_controls = ?8, is_fullscreen_image = ?9 WHERE id = 1",
             params![

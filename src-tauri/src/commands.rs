@@ -14,12 +14,14 @@ pub struct FolderInfo {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ImageHistory {
     pub history: Vec<String>,
+    #[serde(rename = "currentIndex")]
     pub current_index: i64,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct FolderHistory {
     pub history: Vec<String>,
+    #[serde(rename = "currentIndex")]
     pub current_index: i64,
 }
 
@@ -58,7 +60,8 @@ impl From<Box<dyn std::error::Error>> for CommandError {
 }
 
 fn get_loader(state: &State<ImageLoaderState>) -> Result<Arc<ImageLoader>, CommandError> {
-    state.read()
+    state
+        .read()
         .unwrap()
         .as_ref()
         .map(Arc::clone)
@@ -74,7 +77,10 @@ pub async fn pick_folder(
 ) -> Result<FolderInfo, CommandError> {
     let loader = get_loader(&state)?;
     let (id, folder_path) = loader.set_current_folder_and_index(&path).await?;
-    Ok(FolderInfo { id, path: folder_path })
+    Ok(FolderInfo {
+        id,
+        path: folder_path,
+    })
 }
 
 #[tauri::command]
@@ -109,11 +115,15 @@ pub async fn get_folder_history(
     let current_index = if history.is_empty() {
         -1
     } else {
-        let current_id = loader.get_current_folder_id()
-            .map_err(|e| CommandError { message: e.to_string() })?;
+        let current_id = loader.get_current_folder_id().map_err(|e| CommandError {
+            message: e.to_string(),
+        })?;
 
         match current_id {
-            Some(id) => history.iter().position(|(fid, _, _)| *fid == id).unwrap_or(usize::MAX) as i64,
+            Some(id) => history
+                .iter()
+                .position(|(fid, _, _)| *fid == id)
+                .unwrap_or(usize::MAX) as i64,
             None => -1,
         }
     };
@@ -140,23 +150,28 @@ pub async fn get_current_image(
     state: State<'_, ImageLoaderState>,
 ) -> Result<Vec<u8>, CommandError> {
     let loader = get_loader(&state)?;
-    loader.get_current_image_or_first().await.map_err(|e| CommandError { message: e.to_string() })
+    loader
+        .get_current_image_or_first()
+        .await
+        .map_err(|e| CommandError {
+            message: e.to_string(),
+        })
 }
 
 #[tauri::command]
-pub async fn get_next_image(
-    state: State<'_, ImageLoaderState>,
-) -> Result<Vec<u8>, CommandError> {
+pub async fn get_next_image(state: State<'_, ImageLoaderState>) -> Result<Vec<u8>, CommandError> {
     let loader = get_loader(&state)?;
-    loader.get_next_image().await.map_err(|e| CommandError { message: e.to_string() })
+    loader.get_next_image().await.map_err(|e| CommandError {
+        message: e.to_string(),
+    })
 }
 
 #[tauri::command]
-pub async fn get_prev_image(
-    state: State<'_, ImageLoaderState>,
-) -> Result<Vec<u8>, CommandError> {
+pub async fn get_prev_image(state: State<'_, ImageLoaderState>) -> Result<Vec<u8>, CommandError> {
     let loader = get_loader(&state)?;
-    loader.get_prev_image().await.map_err(|e| CommandError { message: e.to_string() })
+    loader.get_prev_image().await.map_err(|e| CommandError {
+        message: e.to_string(),
+    })
 }
 
 #[tauri::command]
@@ -164,7 +179,12 @@ pub async fn get_next_random_image(
     state: State<'_, ImageLoaderState>,
 ) -> Result<Vec<u8>, CommandError> {
     let loader = get_loader(&state)?;
-    loader.get_next_random_image().await.map_err(|e| CommandError { message: e.to_string() })
+    loader
+        .get_next_random_image()
+        .await
+        .map_err(|e| CommandError {
+            message: e.to_string(),
+        })
 }
 
 #[tauri::command]
@@ -172,7 +192,12 @@ pub async fn get_prev_random_image(
     state: State<'_, ImageLoaderState>,
 ) -> Result<Vec<u8>, CommandError> {
     let loader = get_loader(&state)?;
-    loader.get_prev_random_image().await.map_err(|e| CommandError { message: e.to_string() })
+    loader
+        .get_prev_random_image()
+        .await
+        .map_err(|e| CommandError {
+            message: e.to_string(),
+        })
 }
 
 #[tauri::command]
@@ -180,7 +205,12 @@ pub async fn get_force_random_image(
     state: State<'_, ImageLoaderState>,
 ) -> Result<Vec<u8>, CommandError> {
     let loader = get_loader(&state)?;
-    loader.get_force_random_image(true).await.map_err(|e| CommandError { message: e.to_string() })
+    loader
+        .get_force_random_image(true)
+        .await
+        .map_err(|e| CommandError {
+            message: e.to_string(),
+        })
 }
 
 #[tauri::command]
@@ -208,18 +238,14 @@ pub async fn get_random_history(
 }
 
 #[tauri::command]
-pub async fn reset_normal_history(
-    state: State<'_, ImageLoaderState>,
-) -> Result<(), CommandError> {
+pub async fn reset_normal_history(state: State<'_, ImageLoaderState>) -> Result<(), CommandError> {
     let loader = get_loader(&state)?;
     loader.reset_normal_history()?;
     Ok(())
 }
 
 #[tauri::command]
-pub async fn reset_random_history(
-    state: State<'_, ImageLoaderState>,
-) -> Result<(), CommandError> {
+pub async fn reset_random_history(state: State<'_, ImageLoaderState>) -> Result<(), CommandError> {
     let loader = get_loader(&state)?;
     loader.reset_random_history()?;
     Ok(())
@@ -230,7 +256,9 @@ pub async fn get_image_state(
     state: State<'_, ImageLoaderState>,
 ) -> Result<ImageState, CommandError> {
     let loader = get_loader(&state)?;
-    loader.get_image_state().map_err(|e| CommandError { message: e.to_string() })
+    loader.get_image_state().map_err(|e| CommandError {
+        message: e.to_string(),
+    })
 }
 
 #[tauri::command]
@@ -244,18 +272,14 @@ pub async fn set_image_state(
 }
 
 #[tauri::command]
-pub async fn full_wipe(
-    state: State<'_, ImageLoaderState>,
-) -> Result<(), CommandError> {
+pub async fn full_wipe(state: State<'_, ImageLoaderState>) -> Result<(), CommandError> {
     let loader = get_loader(&state)?;
     loader.full_wipe()?;
     Ok(())
 }
 
 #[tauri::command]
-pub async fn is_healthy(
-    state: State<'_, ImageLoaderState>,
-) -> Result<bool, CommandError> {
+pub async fn is_healthy(state: State<'_, ImageLoaderState>) -> Result<bool, CommandError> {
     let loader = get_loader(&state)?;
     let _ = loader.get_image_state()?;
     Ok(true)
