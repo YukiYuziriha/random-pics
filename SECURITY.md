@@ -176,11 +176,10 @@ Deliverable:
 ## Phase 3.6 - Performance optimization ✓ COMPLETE
 
 1. Fix critical performance bottlenecks identified during real-app testing:
-   - Image loading: replaced decode+re-encode with raw file bytes (`std::fs::read`)
-   - DB indexing: batched inserts in single transaction with prepared statement reuse
-   - Scanner: eliminated `ext.to_lowercase()` allocation per file via `eq_ignore_ascii_case`
-   - SQLite pragmas: WAL mode + NORMAL sync during bulk insert, restore to FULL after
-   - Lock contention: single conn lock held for full indexing operation instead of per-call
+    - Image loading: replaced decode+re-encode with raw file bytes (`std::fs::read`)
+    - DB indexing: batched inserts in single transaction with prepared statement reuse
+    - Scanner: eliminated `ext.to_lowercase()` allocation per file via `eq_ignore_ascii_case`
+    - Lock contention: single conn lock held for full indexing operation instead of per-call
 
 2. Performance impact:
    - Image navigation: expected 5-10x faster (no decode/re-encode overhead)
@@ -191,15 +190,19 @@ Deliverable:
   - `src-tauri/src/img_loader.rs`: optimized `load_by_image_id` and `ensure_images_indexed`
   - Single mutex lock scope during batch insert reduces contention
 
-## Phase 4 - Packaging/runtime switch
+## Phase 4 - Packaging/runtime switch ✓ COMPLETE
 
-1. Remove Bun backend spawn logic from `src-tauri/src/lib.rs`.
-2. Remove server build artifact requirements from build pipeline.
-3. Switch Tauri app window to bundled local frontend assets.
-4. Remove remote URL capability needs that only existed for localhost API.
+1. Remove Bun backend spawn logic from `src-tauri/src/lib.rs`. ✓
+2. Remove server build artifact requirements from build pipeline. ✓
+3. Switch Tauri app window to bundled local frontend assets. ✓
+4. Remove remote URL capability needs that only existed for localhost API. ✓
 
 Deliverable:
-- Packaged app runs with no Bun binary and no server process.
+- Tauri runtime no longer depends on localhost server process.
+  - `src-tauri/src/lib.rs`: removed bundled `server` spawn and TCP wait loop
+  - `src-tauri/tauri.conf.json`: removed `devUrl` and window localhost URL
+  - `src-tauri/capabilities/default.json`: removed localhost remote URL scopes
+  - `package.json`: removed `server.ts` compilation from `build:tauri`
 
 ## Phase 5 - Hardening pass
 

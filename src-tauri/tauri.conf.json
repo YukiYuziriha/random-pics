@@ -5,15 +5,13 @@
   "identifier": "com.randompics.app",
   "build": {
     "frontendDist": "../dist-tauri",
-    "devUrl": "http://localhost:3000",
-    "beforeDevCommand": "./dev.sh",
+    "beforeDevCommand": "bun run build:watch:tauri",
     "beforeBuildCommand": "bun run build:tauri"
   },
   "app": {
     "windows": [
       {
         "title": "Random Pics",
-        "url": "http://127.0.0.1:3000",
         "width": 800,
         "height": 500,
         "minWidth": 400,
