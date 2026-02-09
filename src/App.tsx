@@ -746,8 +746,8 @@ export default function App() {
           <img
             src={imageSrc}
             style={{
-              maxWidth: '100vw',
-              maxHeight: '100vh',
+              width: '100vw',
+              height: '100vh',
               objectFit: 'contain',
               transform: `${horizontalMirror ? 'scaleX(-1)' : ''} ${verticalMirror ? 'scaleY(-1)' : ''}`.trim() || 'none',
               filter: greyscale ? 'grayscale(1)' : 'none',
@@ -948,8 +948,8 @@ export default function App() {
             <img
               src={imageSrc}
               style={{
-                maxWidth: '100%',
-                maxHeight: '100%',
+                width: '100%',
+                height: '100%',
                 objectFit: 'contain',
                 transform: `${horizontalMirror ? 'scaleX(-1)' : ''} ${verticalMirror ? 'scaleY(-1)' : ''}`.trim() || 'none',
                 filter: greyscale ? 'grayscale(1)' : 'none',
