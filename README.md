@@ -30,8 +30,9 @@ bunx tauri dev
 
 What this does:
 - starts frontend watch build
-- starts backend server on `127.0.0.1:3000`
-- runs Tauri desktop app
+- runs Tauri desktop app with bundled local frontend assets
+- uses Rust Tauri commands (`invoke`) for backend logic
+- does not require localhost HTTP API
 
 ## typecheck / test
 This project currently uses TypeScript typecheck as the main validation step:
@@ -61,11 +62,17 @@ random-pics
 If you change `src/App.tsx` (or any frontend file):
 - just rebuild package (`bunx tauri build --bundles deb`) and reinstall `.deb`
 
-If you change `server.ts`:
-- same command; `build:tauri` compiles `server.ts` into bundled binary automatically
-- no manual Rust rewrite needed
-
-You only need Rust code changes when modifying:
+If you change backend behavior, update Rust code in:
 - `src-tauri/src/*.rs`
 - `src-tauri/tauri.conf.json`
 - `src-tauri/capabilities/*.json`
+
+Current runtime architecture:
+- no Bun backend process in app runtime
+- no localhost `127.0.0.1:3000` dependency
+- no `/api/*` HTTP transport in frontend app flow
+
+## package size note
+If `.deb` size looks unexpectedly large, check for stale build artifacts in `dist-tauri`.
+
+This app bundles `../dist-tauri` as Tauri resources. If `dist-tauri/server` exists from older builds, it will be included in the package even though runtime no longer uses it.
