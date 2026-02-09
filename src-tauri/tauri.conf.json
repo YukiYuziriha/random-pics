@@ -38,7 +38,8 @@
     "active": true,
     "targets": "all",
     "resources": [
-      "../dist-tauri"
+      "../dist-tauri/index.html",
+      "../dist-tauri/dist"
     ],
     "icon": [
       "icons/32x32.png",
