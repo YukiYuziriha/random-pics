@@ -2,24 +2,29 @@ import { useEffect, useRef, useState } from 'react';
 import { open } from '@tauri-apps/plugin-dialog';
 import { timer } from './timer.ts';
 import {
-  CURRENT_IMAGE_ENDPOINT,
-  FORCE_RANDOM_ENDPOINT,
-  FOLDER_HISTORY_ENDPOINT,
-  FULL_WIPE_ENDPOINT,
-  NEXT_ENDPOINT,
-  NEXT_FOLDER_ENDPOINT,
-  NEXT_RANDOM_ENDPOINT,
-  NORMAL_HISTORY_ENDPOINT,
-  PICK_FOLDER_ENDPOINT,
-  PREV_ENDPOINT,
-  PREV_FOLDER_ENDPOINT,
-  PREV_RANDOM_ENDPOINT,
-  RANDOM_HISTORY_ENDPOINT,
-  REINDEX_CURRENT_FOLDER_ENDPOINT,
-  RESET_NORMAL_HISTORY_ENDPOINT,
-  RESET_RANDOM_HISTORY_ENDPOINT,
-  STATE_ENDPOINT,
-} from './constants/endpoints.ts';
+  pickFolder,
+  getNextFolder,
+  getPrevFolder,
+  getFolderHistory,
+  reindexCurrentFolder,
+  getCurrentImage,
+  getNextImage,
+  getPrevImage,
+  getNextRandomImage,
+  getPrevRandomImage,
+  getForceRandomImage,
+  getNormalHistory,
+  getRandomHistory,
+  resetNormalHistory,
+  resetRandomHistory,
+  getImageState,
+  setImageState,
+  fullWipe,
+  type FolderInfo,
+  type ImageHistory,
+  type FolderHistory,
+  type ImageState,
+} from './apiClient.ts';
 import { FolderControls } from './components/FolderControls.tsx';
 import { HistoryPanel } from './components/HistoryPanel.tsx';
 import { ImageControls } from './components/ImageControls.tsx';
@@ -106,47 +111,49 @@ export default function App() {
   const timerCycleIdRef = useRef(0);
   const timerFlowModeRef = useRef<TimerFlowMode>('random');
 
-  const loadHistory = async (endpoint: string) => {
-    const res = await fetch(`/api/${endpoint}`);
-    const data = await res.json();
-    setHistory(data.history);
-    setHistoryIndex(data.currentIndex);
+  const loadHistory = async (history: ImageHistory) => {
+    setHistory(history.history);
+    setHistoryIndex(history.currentIndex);
   };
 
-  const handleLoadImage = async (endpoint: string) => {
-    const res = await fetch(`/api/${endpoint}`);
-    const blob = await res.blob();
+  const handleLoadImage = async (data: Uint8Array) => {
+    const arrayBuffer = data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength) as ArrayBuffer;
+    const blob = new Blob([arrayBuffer], { type: 'image/jpeg' });
     const url = URL.createObjectURL(blob);
     setImageSrc(url);
   };
 
   const loadFolderHistory = async (): Promise<{ history: string[]; currentIndex: number }> => {
-    const res = await fetch(`/api/${FOLDER_HISTORY_ENDPOINT}`);
-    const data = await res.json();
+    const data = await getFolderHistory();
     setFolderHistory(data.history);
     setFolderHistoryIndex(data.currentIndex);
     return data;
   };
 
   const loadImageState = async () => {
-    const res = await fetch(`/api/${STATE_ENDPOINT}`);
-    const data = await res.json();
-    setVerticalMirror(Boolean(data.verticalMirror));
-    setHorizontalMirror(Boolean(data.horizontalMirror));
-    setGreyscale(Boolean(data.greyscale));
-    setTimerFlowMode(data.timerFlowMode === 'normal' ? 'normal' : 'random');
-    setShowFolderHistoryPanel(Boolean(data.showFolderHistoryPanel));
-    setShowTopControls(Boolean(data.showTopControls));
-    setShowImageHistoryPanel(Boolean(data.showImageHistoryPanel));
-    setShowBottomControls(Boolean(data.showBottomControls));
-    setIsFullscreenImage(Boolean(data.isFullscreenImage));
+    const data = await getImageState();
+    setVerticalMirror(data.verticalMirror);
+    setHorizontalMirror(data.horizontalMirror);
+    setGreyscale(data.greyscale);
+    setTimerFlowMode(data.timerFlowMode);
+    setShowFolderHistoryPanel(data.showFolderHistoryPanel);
+    setShowTopControls(data.showTopControls);
+    setShowImageHistoryPanel(data.showImageHistoryPanel);
+    setShowBottomControls(data.showBottomControls);
+    setIsFullscreenImage(data.isFullscreenImage);
   };
 
   const persistImageState = async (state: PersistedUiState) => {
-    await fetch(`/api/${STATE_ENDPOINT}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(state),
+    await setImageState({
+      verticalMirror: state.verticalMirror,
+      horizontalMirror: state.horizontalMirror,
+      greyscale: state.greyscale,
+      timerFlowMode: state.timerFlowMode,
+      showFolderHistoryPanel: state.showFolderHistoryPanel,
+      showTopControls: state.showTopControls,
+      showImageHistoryPanel: state.showImageHistoryPanel,
+      showBottomControls: state.showBottomControls,
+      isFullscreenImage: state.isFullscreenImage,
     });
   };
 
@@ -155,15 +162,13 @@ export default function App() {
     if (!selected) return false;
     const folderPath = Array.isArray(selected) ? selected[0] : selected;
 
-    await fetch(`/api/${PICK_FOLDER_ENDPOINT}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ path: folderPath }),
-    });
+    await pickFolder(folderPath);
 
     await loadFolderHistory();
-    await handleLoadImage(CURRENT_IMAGE_ENDPOINT);
-    await loadHistory(NORMAL_HISTORY_ENDPOINT);
+    const imageData = await getCurrentImage();
+    await handleLoadImage(imageData);
+    const history = await getNormalHistory();
+    await loadHistory(history);
     return true;
   };
 
@@ -178,8 +183,10 @@ export default function App() {
       await loadImageState();
 
       if (folderData.currentIndex >= 0) {
-        await handleLoadImage(CURRENT_IMAGE_ENDPOINT);
-        await loadHistory(NORMAL_HISTORY_ENDPOINT);
+        const imageData = await getCurrentImage();
+        await handleLoadImage(imageData);
+        const history = await getNormalHistory();
+        await loadHistory(history);
       }
     };
 
@@ -225,36 +232,44 @@ export default function App() {
 
   const loadForceRandomImage = async () => {
     if (!(await ensureFolderSelected())) return;
-    await handleLoadImage(FORCE_RANDOM_ENDPOINT);
-    await loadHistory(RANDOM_HISTORY_ENDPOINT);
+    const imageData = await getForceRandomImage();
+    await handleLoadImage(imageData);
+    const history = await getRandomHistory();
+    await loadHistory(history);
   };
 
   const handlePrevFolder = async () => {
     if (!(await ensureFolderSelected())) return;
-    await fetch(`/api/${PREV_FOLDER_ENDPOINT}`);
+    await getPrevFolder();
     await loadFolderHistory();
-    await handleLoadImage(CURRENT_IMAGE_ENDPOINT);
-    await loadHistory(NORMAL_HISTORY_ENDPOINT);
+    const imageData = await getCurrentImage();
+    await handleLoadImage(imageData);
+    const history = await getNormalHistory();
+    await loadHistory(history);
   };
 
   const handleReindexFolder = async () => {
     if (!(await ensureFolderSelected())) return;
-    await fetch(`/api/${REINDEX_CURRENT_FOLDER_ENDPOINT}`, { method: 'POST' });
+    await reindexCurrentFolder();
     await loadFolderHistory();
-    await handleLoadImage(CURRENT_IMAGE_ENDPOINT);
-    await loadHistory(NORMAL_HISTORY_ENDPOINT);
+    const imageData = await getCurrentImage();
+    await handleLoadImage(imageData);
+    const history = await getNormalHistory();
+    await loadHistory(history);
   };
 
   const handleNextFolder = async () => {
     if (!(await ensureFolderSelected())) return;
-    await fetch(`/api/${NEXT_FOLDER_ENDPOINT}`);
+    await getNextFolder();
     await loadFolderHistory();
-    await handleLoadImage(CURRENT_IMAGE_ENDPOINT);
-    await loadHistory(NORMAL_HISTORY_ENDPOINT);
+    const imageData = await getCurrentImage();
+    await handleLoadImage(imageData);
+    const history = await getNormalHistory();
+    await loadHistory(history);
   };
 
   const handleFullWipe = async () => {
-    await fetch(`/api/${FULL_WIPE_ENDPOINT}`, { method: 'POST' });
+    await fullWipe();
     setImageSrc('');
     setHistory([]);
     setHistoryIndex(-1);
@@ -264,36 +279,46 @@ export default function App() {
 
   const handlePrevImage = async () => {
     if (!(await ensureFolderSelected())) return;
-    await handleLoadImage(PREV_ENDPOINT);
-    await loadHistory(NORMAL_HISTORY_ENDPOINT);
+    const imageData = await getPrevImage();
+    await handleLoadImage(imageData);
+    const history = await getNormalHistory();
+    await loadHistory(history);
   };
 
   const handleNextImage = async () => {
     if (!(await ensureFolderSelected())) return;
-    await handleLoadImage(NEXT_ENDPOINT);
-    await loadHistory(NORMAL_HISTORY_ENDPOINT);
+    const imageData = await getNextImage();
+    await handleLoadImage(imageData);
+    const history = await getNormalHistory();
+    await loadHistory(history);
   };
 
   const handlePrevRandomImage = async () => {
     if (!(await ensureFolderSelected())) return;
-    await handleLoadImage(PREV_RANDOM_ENDPOINT);
-    await loadHistory(RANDOM_HISTORY_ENDPOINT);
+    const imageData = await getPrevRandomImage();
+    await handleLoadImage(imageData);
+    const history = await getRandomHistory();
+    await loadHistory(history);
   };
 
   const handleNextRandomImage = async () => {
     if (!(await ensureFolderSelected())) return;
-    await handleLoadImage(NEXT_RANDOM_ENDPOINT);
-    await loadHistory(RANDOM_HISTORY_ENDPOINT);
+    const imageData = await getNextRandomImage();
+    await handleLoadImage(imageData);
+    const history = await getRandomHistory();
+    await loadHistory(history);
   };
 
   const handleResetRandomHistory = async () => {
-    await fetch(`/api/${RESET_RANDOM_HISTORY_ENDPOINT}`, { method: 'POST' });
-    await loadHistory(RANDOM_HISTORY_ENDPOINT);
+    await resetRandomHistory();
+    const history = await getRandomHistory();
+    await loadHistory(history);
   };
 
   const handleResetNormalHistory = async () => {
-    await fetch(`/api/${RESET_NORMAL_HISTORY_ENDPOINT}`, { method: 'POST' });
-    await loadHistory(NORMAL_HISTORY_ENDPOINT);
+    await resetNormalHistory();
+    const history = await getNormalHistory();
+    await loadHistory(history);
   };
 
   const handleToggleVerticalMirror = async () => {
@@ -359,13 +384,17 @@ export default function App() {
     if (!(await ensureFolderSelected())) return false;
 
     if (timerFlowModeRef.current === 'normal') {
-      await handleLoadImage(NEXT_ENDPOINT);
-      await loadHistory(NORMAL_HISTORY_ENDPOINT);
+      const imageData = await getNextImage();
+      await handleLoadImage(imageData);
+      const history = await getNormalHistory();
+      await loadHistory(history);
       return true;
     }
 
-    await handleLoadImage(NEXT_RANDOM_ENDPOINT);
-    await loadHistory(RANDOM_HISTORY_ENDPOINT);
+    const imageData = await getNextRandomImage();
+    await handleLoadImage(imageData);
+    const history = await getRandomHistory();
+    await loadHistory(history);
     return true;
   };
 

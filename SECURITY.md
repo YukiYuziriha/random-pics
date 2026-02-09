@@ -117,41 +117,48 @@ Deliverable:
   - All passing against Bun HTTP backend
   - See `tests/` directory for implementation
 
-## Phase 1 - Rust backend core extraction
+## Phase 1 - Rust backend core extraction ✓ COMPLETE
 
 1. Create Rust modules for:
-   - DB access + migrations,
-   - folder/image indexing,
-   - traversal/history engine,
-   - persisted UI/image state.
-2. Reproduce current data model and migration safety guarantees.
-3. Preserve data directory semantics for packaged mode.
+   - DB access + migrations, ✓
+   - folder/image indexing, ✓
+   - traversal/history engine, ✓
+   - persisted UI/image state. ✓
+2. Reproduce current data model and migration safety guarantees. ✓
+3. Preserve data directory semantics for packaged mode. ✓
 
 Deliverable:
-- Rust domain/persistence modules with behavior parity tests.
+- Rust domain/persistence modules with behavior parity tests. ✓
+  - src-tauri/src/db.rs - Database schema and migrations
+  - src-tauri/src/img_loader.rs - Domain logic ported from TypeScript
 
-## Phase 2 - Command API design (replace HTTP contract)
+## Phase 2 - Command API design (replace HTTP contract) ✓ COMPLETE
 
 1. Define explicit Tauri commands equivalent to current user actions:
-   - next/prev/random/current image,
-   - random/normal history,
-   - next/prev/pick folder,
-   - reindex/reset/wipe,
-   - get/set app state.
-2. Standardize command result envelopes for success and error cases.
-3. Add strict input validation/canonicalization for filesystem paths.
+   - next/prev/random/current image, ✓
+   - random/normal history, ✓
+   - next/prev/pick folder, ✓
+   - reindex/reset/wipe, ✓
+   - get/set app state. ✓
+2. Standardize command result envelopes for success and error cases. ✓
+3. Add strict input validation/canonicalization for filesystem paths. ✓
 
 Deliverable:
-- Stable command interface documented in `docs/api-contract.md`.
+- Stable command interface documented in `docs/api-contract.md`. ✓
+  - src-tauri/src/commands.rs - Tauri command handlers
+  - src/apiClient.ts - Frontend API client
+  - tests/adapters/tauri.ts - Tauri test adapter
 
-## Phase 3 - Frontend transport swap
+## Phase 3 - Frontend transport swap ✓ COMPLETE
 
-1. Replace all `fetch` calls with `invoke` calls.
-2. Introduce a frontend command client layer so UI components do not depend on transport details.
-3. Preserve UI behavior and state flow.
+1. Replace all `fetch` calls with `invoke` calls. ✓
+2. Introduce a frontend command client layer so UI components do not depend on transport details. ✓
+3. Preserve UI behavior and state flow. ✓
 
 Deliverable:
-- Frontend no longer references localhost API or `/api/*`.
+- Frontend no longer references localhost API or `/api/*`. ✓
+  - src/App.tsx - All fetch calls replaced with invoke
+  - src/apiClient.ts - Unified invoke-based API client
 
 ## Phase 3.5 - Dual-path parity gate
 
