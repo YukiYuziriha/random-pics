@@ -130,3 +130,18 @@ export async function isHealthy(): Promise<boolean> {
     return false;
   }
 }
+
+// Jump to specific index in history
+export async function setFolderByIndex(index: number): Promise<FolderInfo> {
+  return await invoke('set_folder_by_index', { index });
+}
+
+export async function setNormalImageByIndex(index: number): Promise<Uint8Array> {
+  const data = await invoke<number[]>('set_normal_image_by_index', { index });
+  return new Uint8Array(data);
+}
+
+export async function setRandomImageByIndex(index: number): Promise<Uint8Array> {
+  const data = await invoke<number[]>('set_random_image_by_index', { index });
+  return new Uint8Array(data);
+}

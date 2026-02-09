@@ -907,4 +907,78 @@ impl ImageLoader {
         )?;
         Ok(())
     }
+
+    pub fn set_folder_by_index(
+        &self,
+        index: i64,
+    ) -> Result<(i64, String), Box<dyn std::error::Error>> {
+        let history = self.get_folder_history()?;
+        if history.is_empty() {
+            return Err("no folders available".into());
+        }
+
+        let idx = if index < 0 {
+            0
+        } else if index >= history.len() as i64 {
+            history.len() as i64 - 1
+        } else {
+            index
+        };
+
+        let (folder_id, path, _, _) = &history[idx as usize];
+        self.set_current_folder_id(Some(*folder_id))?;
+        Ok((*folder_id, path.clone()))
+    }
+
+    pub async fn set_normal_image_by_index(
+        &self,
+        index: i64,
+    ) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
+        let folder_id = self.ensure_images_indexed().await?;
+        let image_ids = self.get_image_ids(folder_id)?;
+
+        if image_ids.is_empty() {
+            return Err("no images available".into());
+        }
+
+        let idx = if index < 0 {
+            0
+        } else if index >= image_ids.len() as i64 {
+            image_ids.len() as i64 - 1
+        } else {
+            index
+        };
+
+        self.set_current_folder_index(folder_id, idx)?;
+        let image_id = image_ids[idx as usize];
+        self.load_by_image_id(image_id).await
+    }
+
+    pub async fn set_random_image_by_index(
+        &self,
+        index: i64,
+    ) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
+        let folder_id = self.ensure_images_indexed().await?;
+        let count = self.random_history_count(folder_id)?;
+
+        if count == 0 {
+            return self.get_force_random_image(true).await;
+        }
+
+        let idx = if index < 0 {
+            0
+        } else if index >= count {
+            count - 1
+        } else {
+            index
+        };
+
+        let image_id_opt = self.random_history_at(folder_id, idx)?;
+        if let Some(image_id) = image_id_opt {
+            self.set_current_folder_random_index(folder_id, idx)?;
+            return self.load_by_image_id(image_id).await;
+        }
+
+        self.get_force_random_image(true).await
+    }
 }

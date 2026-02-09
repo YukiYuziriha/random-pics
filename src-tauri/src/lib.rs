@@ -50,27 +50,30 @@ pub fn run() {
             app.global_shortcut().register(f11.clone())?;
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![
-            commands::pick_folder,
-            commands::next_folder,
-            commands::prev_folder,
-            commands::get_folder_history,
-            commands::reindex_current_folder,
-            commands::get_current_image,
-            commands::get_next_image,
-            commands::get_prev_image,
-            commands::get_next_random_image,
-            commands::get_prev_random_image,
-            commands::get_force_random_image,
-            commands::get_normal_history,
-            commands::get_random_history,
-            commands::reset_normal_history,
-            commands::reset_random_history,
-            commands::get_image_state,
-            commands::set_image_state,
-            commands::full_wipe,
-            commands::is_healthy,
-        ])
+            .invoke_handler(tauri::generate_handler![
+                commands::pick_folder,
+                commands::next_folder,
+                commands::prev_folder,
+                commands::get_folder_history,
+                commands::reindex_current_folder,
+                commands::get_current_image,
+                commands::get_next_image,
+                commands::get_prev_image,
+                commands::get_next_random_image,
+                commands::get_prev_random_image,
+                commands::get_force_random_image,
+                commands::get_normal_history,
+                commands::get_random_history,
+                commands::reset_normal_history,
+                commands::reset_random_history,
+                commands::get_image_state,
+                commands::set_image_state,
+                commands::full_wipe,
+                commands::is_healthy,
+                commands::set_folder_by_index,
+                commands::set_normal_image_by_index,
+                commands::set_random_image_by_index,
+            ])
         .run(tauri::generate_context!())
         .unwrap_or_else(|err| eprintln!("error while running tauri application: {}", err));
 }

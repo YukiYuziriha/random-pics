@@ -22,6 +22,9 @@ import {
   getImageState,
   setImageState,
   fullWipe,
+  setFolderByIndex,
+  setNormalImageByIndex,
+  setRandomImageByIndex,
   type FolderHistoryItem,
   type ImageHistory,
   type ImageState,
@@ -101,6 +104,7 @@ export default function App() {
   const [remainingTimerSeconds, setRemainingTimerSeconds] = useState(() => readPersistedSeconds(REMAINING_TIMER_STORAGE_KEY, 10));
   const [isTimerRunning, setIsTimerRunning] = useState(false);
   const [timerFlowMode, setTimerFlowMode] = useState<TimerFlowMode>('random');
+  const [activeHistoryMode, setActiveHistoryMode] = useState<'normal' | 'random'>('normal');
   const [showFolderHistoryPanel, setShowFolderHistoryPanel] = useState(true);
   const [showTopControls, setShowTopControls] = useState(true);
   const [showImageHistoryPanel, setShowImageHistoryPanel] = useState(true);
@@ -116,9 +120,10 @@ export default function App() {
   const timerCycleIdRef = useRef(0);
   const timerFlowModeRef = useRef<TimerFlowMode>('random');
 
-  const loadHistory = async (history: ImageHistory) => {
+  const loadHistory = async (history: ImageHistory, mode: 'normal' | 'random') => {
     setHistory(history.history);
     setHistoryIndex(history.currentIndex);
+    setActiveHistoryMode(mode);
   };
 
   const appendIndexLog = (line: string) => {
@@ -217,7 +222,7 @@ export default function App() {
       const imageData = await getCurrentImage();
       await handleLoadImage(imageData);
       const history = await getNormalHistory();
-      await loadHistory(history);
+      await loadHistory(history, 'normal');
       endIndexingUi(true);
       return true;
     } catch (err) {
@@ -242,7 +247,7 @@ export default function App() {
         const imageData = await getCurrentImage();
         await handleLoadImage(imageData);
         const history = await getNormalHistory();
-        await loadHistory(history);
+        await loadHistory(history, 'normal');
       }
     };
 
@@ -365,13 +370,48 @@ export default function App() {
     return folderHistory[historyIndexAtSlot] ?? null;
   });
 
+  const handleFolderItemClick = async (slotIndex: number) => {
+    if (isIndexing) return;
+    const offset = half - slotIndex;
+    const targetIndex = folderHistoryIndex + offset;
+    if (targetIndex === folderHistoryIndex) return;
+    if (targetIndex < 0 || targetIndex >= folderHistory.length) return;
+
+    await setFolderByIndex(targetIndex);
+    await loadFolderHistory();
+    const imageData = await getCurrentImage();
+    await handleLoadImage(imageData);
+    const history = await getNormalHistory();
+    await loadHistory(history, 'normal');
+  };
+
+  const handleImageItemClick = async (slotIndex: number) => {
+    if (isIndexing) return;
+    const offset = slotIndex - half;
+    const targetIndex = historyIndex + offset;
+    if (targetIndex === historyIndex) return;
+    if (targetIndex < 0 || targetIndex >= history.length) return;
+
+    if (activeHistoryMode === 'normal') {
+      const imageData = await setNormalImageByIndex(targetIndex);
+      await handleLoadImage(imageData);
+      const hist = await getNormalHistory();
+      await loadHistory(hist, 'normal');
+    } else {
+      const imageData = await setRandomImageByIndex(targetIndex);
+      await handleLoadImage(imageData);
+      const hist = await getRandomHistory();
+      await loadHistory(hist, 'random');
+    }
+  };
+
   const loadForceRandomImage = async () => {
     if (isIndexing) return;
     if (!(await ensureFolderSelected())) return;
     const imageData = await getForceRandomImage();
     await handleLoadImage(imageData);
     const history = await getRandomHistory();
-    await loadHistory(history);
+    await loadHistory(history, 'random');
   };
 
   const handlePrevFolder = async () => {
@@ -382,7 +422,7 @@ export default function App() {
     const imageData = await getCurrentImage();
     await handleLoadImage(imageData);
     const history = await getNormalHistory();
-    await loadHistory(history);
+    await loadHistory(history, 'normal');
   };
 
   const handleReindexFolder = async () => {
@@ -402,7 +442,7 @@ export default function App() {
       const imageData = await getCurrentImage();
       await handleLoadImage(imageData);
       const history = await getNormalHistory();
-      await loadHistory(history);
+      await loadHistory(history, 'normal');
       endIndexingUi(true);
     } catch (err) {
       appendIndexLog(`error:${formatError(err)}`);
@@ -419,7 +459,7 @@ export default function App() {
     const imageData = await getCurrentImage();
     await handleLoadImage(imageData);
     const history = await getNormalHistory();
-    await loadHistory(history);
+    await loadHistory(history, 'normal');
   };
 
   const handleFullWipe = async () => {
@@ -438,7 +478,7 @@ export default function App() {
     const imageData = await getPrevImage();
     await handleLoadImage(imageData);
     const history = await getNormalHistory();
-    await loadHistory(history);
+    await loadHistory(history, 'normal');
   };
 
   const handleNextImage = async () => {
@@ -447,7 +487,7 @@ export default function App() {
     const imageData = await getNextImage();
     await handleLoadImage(imageData);
     const history = await getNormalHistory();
-    await loadHistory(history);
+    await loadHistory(history, 'normal');
   };
 
   const handlePrevRandomImage = async () => {
@@ -456,7 +496,7 @@ export default function App() {
     const imageData = await getPrevRandomImage();
     await handleLoadImage(imageData);
     const history = await getRandomHistory();
-    await loadHistory(history);
+    await loadHistory(history, 'random');
   };
 
   const handleNextRandomImage = async () => {
@@ -465,21 +505,21 @@ export default function App() {
     const imageData = await getNextRandomImage();
     await handleLoadImage(imageData);
     const history = await getRandomHistory();
-    await loadHistory(history);
+    await loadHistory(history, 'random');
   };
 
   const handleResetRandomHistory = async () => {
     if (isIndexing) return;
     await resetRandomHistory();
     const history = await getRandomHistory();
-    await loadHistory(history);
+    await loadHistory(history, 'random');
   };
 
   const handleResetNormalHistory = async () => {
     if (isIndexing) return;
     await resetNormalHistory();
     const history = await getNormalHistory();
-    await loadHistory(history);
+    await loadHistory(history, 'normal');
   };
 
   const handleToggleVerticalMirror = async () => {
@@ -549,14 +589,14 @@ export default function App() {
       const imageData = await getNextImage();
       await handleLoadImage(imageData);
       const history = await getNormalHistory();
-      await loadHistory(history);
+      await loadHistory(history, 'normal');
       return true;
     }
 
     const imageData = await getNextRandomImage();
     await handleLoadImage(imageData);
     const history = await getRandomHistory();
-    await loadHistory(history);
+    await loadHistory(history, 'random');
     return true;
   };
 
@@ -925,6 +965,7 @@ export default function App() {
           items={folderWindowItems}
           currentSlotIndex={half}
           pendingItem={indexingFolderPath}
+          onItemClick={handleFolderItemClick}
         />
       )}
 
@@ -1052,6 +1093,7 @@ export default function App() {
           listItemTestId="list-item"
           items={windowItems}
           currentSlotIndex={half}
+          onItemClick={handleImageItemClick}
         />
       )}
     </div>

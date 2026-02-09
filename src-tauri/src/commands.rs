@@ -319,3 +319,31 @@ pub async fn is_healthy(state: State<'_, ImageLoaderState>) -> Result<bool, Comm
     let _ = loader.get_image_state()?;
     Ok(true)
 }
+
+#[tauri::command]
+pub async fn set_folder_by_index(
+    index: i64,
+    state: State<'_, ImageLoaderState>,
+) -> Result<FolderInfo, CommandError> {
+    let loader = get_loader(&state)?;
+    let (id, path) = loader.set_folder_by_index(index)?;
+    Ok(FolderInfo { id, path })
+}
+
+#[tauri::command]
+pub async fn set_normal_image_by_index(
+    index: i64,
+    state: State<'_, ImageLoaderState>,
+) -> Result<Vec<u8>, CommandError> {
+    let loader = get_loader(&state)?;
+    loader.set_normal_image_by_index(index).await.map_err(Into::into)
+}
+
+#[tauri::command]
+pub async fn set_random_image_by_index(
+    index: i64,
+    state: State<'_, ImageLoaderState>,
+) -> Result<Vec<u8>, CommandError> {
+    let loader = get_loader(&state)?;
+    loader.set_random_image_by_index(index).await.map_err(Into::into)
+}
