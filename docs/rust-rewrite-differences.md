@@ -31,3 +31,10 @@ It is focused on real logic/UI differences, not just file moves.
 1. Behavior parity suite remains the acceptance gate for traversal/history/state semantics.
 2. Performance changes are intended to preserve functional outcomes while reducing latency.
 3. Bun branch remains the baseline reference for migration comparison during rewrite.
+
+## Security Hardening Differences
+
+1. Tauri now uses explicit CSP rules instead of `csp: null`.
+2. Capabilities were narrowed from `core:default` to required event + dialog permissions.
+3. Folder selection now canonicalizes and validates path readability before indexing.
+4. Command errors are sanitized through centralized mapping to avoid leaking internal details.

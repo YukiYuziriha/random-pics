@@ -1,6 +1,7 @@
 use crate::db::Db;
 use rand::seq::SliceRandom;
 use rusqlite::{params, OptionalExtension};
+use std::path::Path;
 use walkdir::WalkDir;
 
 pub struct ImageLoader {
@@ -11,6 +12,27 @@ unsafe impl Send for ImageLoader {}
 unsafe impl Sync for ImageLoader {}
 
 impl ImageLoader {
+    fn canonicalize_folder_path(path: &str) -> Result<String, Box<dyn std::error::Error>> {
+        let trimmed = path.trim();
+        if trimmed.is_empty() {
+            return Err("invalid folder path".into());
+        }
+
+        let canonical = std::fs::canonicalize(Path::new(trimmed))
+            .map_err(|_| "invalid folder path")?;
+
+        if !canonical.is_dir() {
+            return Err("folder path is not a directory".into());
+        }
+
+        std::fs::read_dir(&canonical).map_err(|_| "folder path is unreadable")?;
+
+        canonical
+            .to_str()
+            .map(|s| s.to_string())
+            .ok_or_else(|| "invalid folder path".into())
+    }
+
     fn is_supported_image_ext(ext: &str) -> bool {
         ext.eq_ignore_ascii_case("jpeg")
             || ext.eq_ignore_ascii_case("jpg")
@@ -365,11 +387,12 @@ impl ImageLoader {
     pub fn set_current_folder_by_path(
         &self,
         path: &str,
-    ) -> Result<i64, Box<dyn std::error::Error>> {
+    ) -> Result<(i64, String), Box<dyn std::error::Error>> {
+        let canonical_path = Self::canonicalize_folder_path(path)?;
         let added_at = chrono::Utc::now().to_rfc3339();
-        let id = self.insert_folder(path, &added_at)?;
+        let id = self.insert_folder(&canonical_path, &added_at)?;
         self.set_current_folder_id(Some(id))?;
-        Ok(id)
+        Ok((id, canonical_path))
     }
 
     pub async fn ensure_images_indexed_with_progress<F>(
@@ -453,9 +476,9 @@ impl ImageLoader {
         &self,
         path: &str,
     ) -> Result<(i64, String), Box<dyn std::error::Error>> {
-        let _id = self.set_current_folder_by_path(path)?;
+        let (_id, canonical_path) = self.set_current_folder_by_path(path)?;
         let folder_id = self.ensure_images_indexed().await?;
-        Ok((folder_id, path.to_string()))
+        Ok((folder_id, canonical_path))
     }
 
     pub async fn set_current_folder_and_index_with_progress<F>(
@@ -466,9 +489,9 @@ impl ImageLoader {
     where
         F: FnMut(String),
     {
-        let _id = self.set_current_folder_by_path(path)?;
+        let (_id, canonical_path) = self.set_current_folder_by_path(path)?;
         let folder_id = self.ensure_images_indexed_with_progress(on_progress).await?;
-        Ok((folder_id, path.to_string()))
+        Ok((folder_id, canonical_path))
     }
 
     pub async fn load_by_image_id(

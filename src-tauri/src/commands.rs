@@ -3,6 +3,20 @@ use serde::{Deserialize, Serialize};
 use std::sync::{Arc, RwLock};
 use tauri::{AppHandle, Emitter, State};
 
+const SAFE_ERROR_MESSAGES: &[&str] = &[
+    "ImageLoader not initialized",
+    "internal error",
+    "no folder selected",
+    "no current folder set",
+    "no images available",
+    "no images found in folder",
+    "image not found",
+    "invalid folder path",
+    "folder path is not a directory",
+    "folder path is unreadable",
+    "invalid timer flow mode",
+];
+
 pub type ImageLoaderState = Arc<RwLock<Option<Arc<ImageLoader>>>>;
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -60,16 +74,39 @@ pub struct CommandError {
 
 impl From<Box<dyn std::error::Error>> for CommandError {
     fn from(err: Box<dyn std::error::Error>) -> Self {
+        let raw = err.to_string();
         Self {
-            message: err.to_string(),
+            message: sanitize_error_message(&raw),
         }
+    }
+}
+
+impl CommandError {
+    fn internal() -> Self {
+        Self {
+            message: "internal error".to_string(),
+        }
+    }
+
+    fn invalid(message: &str) -> Self {
+        Self {
+            message: message.to_string(),
+        }
+    }
+}
+
+fn sanitize_error_message(raw: &str) -> String {
+    if SAFE_ERROR_MESSAGES.contains(&raw) {
+        raw.to_string()
+    } else {
+        "internal error".to_string()
     }
 }
 
 fn get_loader(state: &State<ImageLoaderState>) -> Result<Arc<ImageLoader>, CommandError> {
     state
         .read()
-        .unwrap()
+        .map_err(|_| CommandError::internal())?
         .as_ref()
         .map(Arc::clone)
         .ok_or_else(|| CommandError {
@@ -128,9 +165,7 @@ pub async fn get_folder_history(
     let current_index = if history.is_empty() {
         -1
     } else {
-        let current_id = loader.get_current_folder_id().map_err(|e| CommandError {
-            message: e.to_string(),
-        })?;
+        let current_id = loader.get_current_folder_id()?;
 
         match current_id {
             Some(id) => history
@@ -172,28 +207,19 @@ pub async fn get_current_image(
     state: State<'_, ImageLoaderState>,
 ) -> Result<Vec<u8>, CommandError> {
     let loader = get_loader(&state)?;
-    loader
-        .get_current_image_or_first()
-        .await
-        .map_err(|e| CommandError {
-            message: e.to_string(),
-        })
+    loader.get_current_image_or_first().await.map_err(Into::into)
 }
 
 #[tauri::command]
 pub async fn get_next_image(state: State<'_, ImageLoaderState>) -> Result<Vec<u8>, CommandError> {
     let loader = get_loader(&state)?;
-    loader.get_next_image().await.map_err(|e| CommandError {
-        message: e.to_string(),
-    })
+    loader.get_next_image().await.map_err(Into::into)
 }
 
 #[tauri::command]
 pub async fn get_prev_image(state: State<'_, ImageLoaderState>) -> Result<Vec<u8>, CommandError> {
     let loader = get_loader(&state)?;
-    loader.get_prev_image().await.map_err(|e| CommandError {
-        message: e.to_string(),
-    })
+    loader.get_prev_image().await.map_err(Into::into)
 }
 
 #[tauri::command]
@@ -201,12 +227,7 @@ pub async fn get_next_random_image(
     state: State<'_, ImageLoaderState>,
 ) -> Result<Vec<u8>, CommandError> {
     let loader = get_loader(&state)?;
-    loader
-        .get_next_random_image()
-        .await
-        .map_err(|e| CommandError {
-            message: e.to_string(),
-        })
+    loader.get_next_random_image().await.map_err(Into::into)
 }
 
 #[tauri::command]
@@ -214,12 +235,7 @@ pub async fn get_prev_random_image(
     state: State<'_, ImageLoaderState>,
 ) -> Result<Vec<u8>, CommandError> {
     let loader = get_loader(&state)?;
-    loader
-        .get_prev_random_image()
-        .await
-        .map_err(|e| CommandError {
-            message: e.to_string(),
-        })
+    loader.get_prev_random_image().await.map_err(Into::into)
 }
 
 #[tauri::command]
@@ -227,12 +243,7 @@ pub async fn get_force_random_image(
     state: State<'_, ImageLoaderState>,
 ) -> Result<Vec<u8>, CommandError> {
     let loader = get_loader(&state)?;
-    loader
-        .get_force_random_image(true)
-        .await
-        .map_err(|e| CommandError {
-            message: e.to_string(),
-        })
+    loader.get_force_random_image(true).await.map_err(Into::into)
 }
 
 #[tauri::command]
@@ -278,9 +289,7 @@ pub async fn get_image_state(
     state: State<'_, ImageLoaderState>,
 ) -> Result<ImageState, CommandError> {
     let loader = get_loader(&state)?;
-    loader.get_image_state().map_err(|e| CommandError {
-        message: e.to_string(),
-    })
+    loader.get_image_state().map_err(Into::into)
 }
 
 #[tauri::command]
@@ -289,6 +298,9 @@ pub async fn set_image_state(
     loader_state: State<'_, ImageLoaderState>,
 ) -> Result<(), CommandError> {
     let loader = get_loader(&loader_state)?;
+    if state.timer_flow_mode != "normal" && state.timer_flow_mode != "random" {
+        return Err(CommandError::invalid("invalid timer flow mode"));
+    }
     loader.set_image_state(&state)?;
     Ok(())
 }

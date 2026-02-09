@@ -204,15 +204,20 @@ Deliverable:
   - `src-tauri/capabilities/default.json`: removed localhost remote URL scopes
   - `package.json`: removed `server.ts` compilation from `build:tauri`
 
-## Phase 5 - Hardening pass
+## Phase 5 - Hardening pass ✓ COMPLETE
 
-1. Replace `csp: null` with explicit CSP policy compatible with app assets.
-2. Restrict Tauri permissions/capabilities to minimum required set.
-3. Add centralized Rust error handling to prevent panic-driven crashes on malformed inputs.
-4. Enforce path canonicalization and explicit rejection of invalid/unreadable paths.
+1. Replace `csp: null` with explicit CSP policy compatible with app assets. ✓
+2. Restrict Tauri permissions/capabilities to minimum required set. ✓
+3. Add centralized Rust error handling to prevent panic-driven crashes on malformed inputs. ✓
+4. Enforce path canonicalization and explicit rejection of invalid/unreadable paths. ✓
 
 Deliverable:
-- Security controls documented and enforced in runtime config.
+- Security controls documented and enforced in runtime config. ✓
+  - `src-tauri/tauri.conf.json`: explicit CSP with local-only IPC/asset directives
+  - `src-tauri/capabilities/default.json`: removed `core:default`; narrowed to event listen/unlisten + dialog open
+  - `src-tauri/src/commands.rs`: centralized command error sanitization + invalid timer mode rejection
+  - `src-tauri/src/img_loader.rs`: canonical folder path validation (exists, directory, readable)
+  - `src-tauri/src/lib.rs`: removed startup `expect`/`unwrap` panic paths
 
 ## Phase 6 - Decommission legacy path
 

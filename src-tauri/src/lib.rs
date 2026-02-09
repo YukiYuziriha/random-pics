@@ -14,9 +14,12 @@ pub fn run() {
         .manage(ImageLoaderState::new(std::sync::RwLock::new(None)))
         .setup(|app| {
             let db_path = db::get_db_path(app.handle())?;
-            let db = Db::open(db_path).expect("Failed to open database");
+            let db = Db::open(db_path)?;
             let loader = Arc::new(ImageLoader::new(db));
-            *app.state::<ImageLoaderState>().write().unwrap() = Some(loader);
+            *app.state::<ImageLoaderState>()
+                .write()
+                .map_err(|_| std::io::Error::other("image loader state lock poisoned"))? =
+                Some(loader);
 
             if cfg!(debug_assertions) {
                 app.handle().plugin(
@@ -50,5 +53,5 @@ pub fn run() {
             commands::is_healthy,
         ])
         .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .unwrap_or_else(|err| eprintln!("error while running tauri application: {}", err));
 }
