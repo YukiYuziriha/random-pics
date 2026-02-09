@@ -69,3 +69,6 @@ You only need Rust code changes when modifying:
 - `src-tauri/src/*.rs`
 - `src-tauri/tauri.conf.json`
 - `src-tauri/capabilities/*.json`
+
+## docs
+- [Local Bun server security concerns](docs/local-bun-server-security.md)
