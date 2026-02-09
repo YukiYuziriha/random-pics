@@ -11,6 +11,14 @@ unsafe impl Send for ImageLoader {}
 unsafe impl Sync for ImageLoader {}
 
 impl ImageLoader {
+    fn is_supported_image_ext(ext: &str) -> bool {
+        ext.eq_ignore_ascii_case("jpeg")
+            || ext.eq_ignore_ascii_case("jpg")
+            || ext.eq_ignore_ascii_case("png")
+            || ext.eq_ignore_ascii_case("gif")
+            || ext.eq_ignore_ascii_case("webp")
+    }
+
     pub fn new(db: Db) -> Self {
         Self { db }
     }
@@ -364,13 +372,22 @@ impl ImageLoader {
         Ok(id)
     }
 
-    pub async fn ensure_images_indexed(&self) -> Result<i64, Box<dyn std::error::Error>> {
+    pub async fn ensure_images_indexed_with_progress<F>(
+        &self,
+        mut on_progress: F,
+    ) -> Result<i64, Box<dyn std::error::Error>>
+    where
+        F: FnMut(String),
+    {
         let (folder_id, folder_path) = self
             .get_current_folder_id_and_path()?
             .ok_or("no folder selected")?;
 
+        on_progress(format!("scan:start {}", folder_path));
+
         let count = self.count_images(folder_id)?;
         if count > 0 {
+            on_progress(format!("scan:skip already indexed count={}", count));
             return Ok(folder_id);
         }
 
@@ -385,42 +402,51 @@ impl ImageLoader {
         {
             let path = entry.path();
             if let Some(ext) = path.extension().and_then(|e| e.to_str()) {
-                if ext.eq_ignore_ascii_case("jpeg")
-                    || ext.eq_ignore_ascii_case("jpg")
-                    || ext.eq_ignore_ascii_case("png")
-                    || ext.eq_ignore_ascii_case("gif")
-                    || ext.eq_ignore_ascii_case("webp")
-                {
+                if Self::is_supported_image_ext(ext) {
                     if let Some(path_str) = path.to_str() {
                         paths.push(path_str.to_string());
+                        if paths.len() % 200 == 0 {
+                            on_progress(format!("scan:found {}", paths.len()));
+                        }
                     }
                 }
             }
         }
 
+        on_progress(format!("scan:done total={}", paths.len()));
+
         if !paths.is_empty() {
             let mut conn = self.db.conn();
             let tx = conn.transaction()?;
-            tx.execute("PRAGMA journal_mode = WAL", [])?;
-            tx.execute("PRAGMA synchronous = NORMAL", [])?;
             {
+                let total = paths.len();
                 let mut stmt = tx.prepare(
                     "INSERT OR IGNORE INTO images (path, folder_id) VALUES (?1, ?2)",
                 )?;
-                for path in &paths {
+                for (i, path) in paths.iter().enumerate() {
                     stmt.execute(params![path, folder_id])?;
+                    let done = i + 1;
+                    if done <= 10 || done == total || done % 100 == 0 {
+                        on_progress(format!("index:{}/{} {}", done, total, path));
+                    }
                 }
             }
-            tx.execute("PRAGMA synchronous = FULL", [])?;
             tx.commit()?;
+            on_progress("index:done".to_string());
         }
 
         let after_count = self.count_images(folder_id)?;
         if after_count == 0 {
+            on_progress("index:error no images found".to_string());
             return Err("no images found in folder".into());
         }
 
+        on_progress(format!("index:ready count={}", after_count));
         Ok(folder_id)
+    }
+
+    pub async fn ensure_images_indexed(&self) -> Result<i64, Box<dyn std::error::Error>> {
+        self.ensure_images_indexed_with_progress(|_| {}).await
     }
 
     pub async fn set_current_folder_and_index(
@@ -429,6 +455,19 @@ impl ImageLoader {
     ) -> Result<(i64, String), Box<dyn std::error::Error>> {
         let _id = self.set_current_folder_by_path(path)?;
         let folder_id = self.ensure_images_indexed().await?;
+        Ok((folder_id, path.to_string()))
+    }
+
+    pub async fn set_current_folder_and_index_with_progress<F>(
+        &self,
+        path: &str,
+        on_progress: F,
+    ) -> Result<(i64, String), Box<dyn std::error::Error>>
+    where
+        F: FnMut(String),
+    {
+        let _id = self.set_current_folder_by_path(path)?;
+        let folder_id = self.ensure_images_indexed_with_progress(on_progress).await?;
         Ok((folder_id, path.to_string()))
     }
 
@@ -646,20 +685,23 @@ impl ImageLoader {
 
     pub fn get_folder_history(
         &self,
-    ) -> Result<Vec<(i64, String, String)>, Box<dyn std::error::Error>> {
+    ) -> Result<Vec<(i64, String, String, i64)>, Box<dyn std::error::Error>> {
         self.db
             .with_conn(|conn| {
-                let history: Vec<(i64, String, String)> = conn
-                    .prepare("SELECT id, path, added_at FROM folders ORDER BY added_at DESC")?
+                let history: Vec<(i64, String, String, i64)> = conn
+                    .prepare(
+                        "SELECT f.id, f.path, f.added_at, COUNT(i.id) AS image_count FROM folders f LEFT JOIN images i ON i.folder_id = f.id GROUP BY f.id ORDER BY f.added_at DESC",
+                    )?
                     .query_map([], |row| {
                         let id: i64 = row.get(0)?;
                         let path: String = row.get(1)?;
                         let added_at: String = row.get(2)?;
-                        Ok((id, path, added_at))
+                        let image_count: i64 = row.get(3)?;
+                        Ok((id, path, added_at, image_count))
                     })?
                     .collect::<Result<Vec<_>, _>>()?;
 
-                Ok::<Vec<(i64, String, String)>, rusqlite::Error>(history)
+                Ok::<Vec<(i64, String, String, i64)>, rusqlite::Error>(history)
             })
             .map_err(|e| e.into())
     }
@@ -681,18 +723,18 @@ impl ImageLoader {
 
         match current_id {
             Some(id) => {
-                let idx = history.iter().position(|(fid, _, _)| *fid == id);
+                let idx = history.iter().position(|(fid, _, _, _)| *fid == id);
                 let next_idx = match idx {
                     Some(i) if i <= 0 => history.len() - 1,
                     Some(i) => i - 1,
                     None => history.len() - 1,
                 };
-                let (next_id, next_path, _) = &history[next_idx];
+                let (next_id, next_path, _, _) = &history[next_idx];
                 self.set_current_folder_id(Some(*next_id))?;
                 Ok(Some((*next_id, next_path.clone())))
             }
             None => {
-                let (oldest_id, oldest_path, _) = &history[history.len() - 1];
+                let (oldest_id, oldest_path, _, _) = &history[history.len() - 1];
                 self.set_current_folder_id(Some(*oldest_id))?;
                 Ok(Some((*oldest_id, oldest_path.clone())))
             }
@@ -716,18 +758,18 @@ impl ImageLoader {
 
         match current_id {
             Some(id) => {
-                let idx = history.iter().position(|(fid, _, _)| *fid == id);
+                let idx = history.iter().position(|(fid, _, _, _)| *fid == id);
                 let prev_idx = match idx {
                     Some(i) if i >= history.len() - 1 => 0,
                     Some(i) => i + 1,
                     None => 0,
                 };
-                let (prev_id, prev_path, _) = &history[prev_idx];
+                let (prev_id, prev_path, _, _) = &history[prev_idx];
                 self.set_current_folder_id(Some(*prev_id))?;
                 Ok(Some((*prev_id, prev_path.clone())))
             }
             None => {
-                let (newest_id, newest_path, _) = &history[0];
+                let (newest_id, newest_path, _, _) = &history[0];
                 self.set_current_folder_id(Some(*newest_id))?;
                 Ok(Some((*newest_id, newest_path.clone())))
             }
@@ -746,6 +788,25 @@ impl ImageLoader {
         self.clear_random_history(folder_id)?;
         self.set_current_folder_index(folder_id, -1)?;
         self.ensure_images_indexed().await?;
+        Ok((folder_id, folder_path))
+    }
+
+    pub async fn reindex_current_folder_with_progress<F>(
+        &self,
+        on_progress: F,
+    ) -> Result<(i64, String), Box<dyn std::error::Error>>
+    where
+        F: FnMut(String),
+    {
+        let (folder_id, folder_path) = self
+            .get_current_folder_id_and_path()?
+            .ok_or("no current folder set")?;
+
+        self.delete_images_by_folder_id(folder_id)?;
+        self.lap_clear(folder_id)?;
+        self.clear_random_history(folder_id)?;
+        self.set_current_folder_index(folder_id, -1)?;
+        self.ensure_images_indexed_with_progress(on_progress).await?;
         Ok((folder_id, folder_path))
     }
 

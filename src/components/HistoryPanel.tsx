@@ -1,10 +1,28 @@
+import type { FolderHistoryItem } from '../apiClient.ts';
+
+type HistoryItem = string | FolderHistoryItem;
+
 type HistoryPanelProps = {
   panelTestId: string;
   listContainerTestId: string;
   listItemTestId: string;
-  items: Array<string | null>;
+  items: Array<HistoryItem | null>;
   currentSlotIndex: number;
+  pendingItem?: string | null;
 };
+
+function displayLabel(item: HistoryItem): string {
+  if (typeof item === 'string') {
+    return item.split('/').pop() || item;
+  }
+
+  const folderName = item.path.split('/').pop() || item.path;
+  return `${folderName} (${item.imageCount})`;
+}
+
+function itemPath(item: HistoryItem): string {
+  return typeof item === 'string' ? item : item.path;
+}
 
 export function HistoryPanel({
   panelTestId,
@@ -12,6 +30,7 @@ export function HistoryPanel({
   listItemTestId,
   items,
   currentSlotIndex,
+  pendingItem = null,
 }: HistoryPanelProps) {
   return (
     <div
@@ -41,6 +60,7 @@ export function HistoryPanel({
       >
         {items.map((item, i) => {
           const isCurrent = i === currentSlotIndex;
+          const isPending = !!item && pendingItem === itemPath(item);
           return (
             <div
               data-testid={listItemTestId}
@@ -53,14 +73,14 @@ export function HistoryPanel({
                 whiteSpace: 'nowrap',
                 overflow: 'hidden',
                 textOverflow: 'ellipsis',
-                color: item ? (isCurrent ? '#c0caf5' : '#a9b1d6') : 'transparent',
+                color: item ? (isPending ? '#f2d06b' : isCurrent ? '#c0caf5' : '#a9b1d6') : 'transparent',
                 background: isCurrent ? '#2f334d' : 'transparent',
                 fontWeight: isCurrent ? 700 : 400,
                 fontFamily: 'monospace',
                 borderRadius: '2px',
               }}
             >
-              {item ? item.split('/').pop() : 'placeholder'}
+              {item ? `${displayLabel(item)}${isPending ? ' [loading...]' : ''}` : 'placeholder'}
             </div>
           );
         })}

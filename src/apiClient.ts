@@ -18,8 +18,13 @@ export type ImageHistory = {
 };
 
 export type FolderHistory = {
-  history: string[];
+  history: FolderHistoryItem[];
   currentIndex: number;
+};
+
+export type FolderHistoryItem = {
+  path: string;
+  imageCount: number;
 };
 
 export type ImageState = {

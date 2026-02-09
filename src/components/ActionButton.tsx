@@ -1,12 +1,14 @@
 type ActionButtonProps = {
   label: string;
   onClick: () => void | Promise<void>;
+  disabled?: boolean;
 };
 
-export function ActionButton({ label, onClick }: ActionButtonProps) {
+export function ActionButton({ label, onClick, disabled = false }: ActionButtonProps) {
   return (
     <button
       onClick={onClick}
+      disabled={disabled}
       style={{
         background: '#24283b',
         color: '#c0caf5',
@@ -17,7 +19,8 @@ export function ActionButton({ label, onClick }: ActionButtonProps) {
         letterSpacing: '0.04em',
         padding: '5px 8px',
         minHeight: '28px',
-        cursor: 'pointer',
+        cursor: disabled ? 'not-allowed' : 'pointer',
+        opacity: disabled ? 0.55 : 1,
       }}
     >
       {label}

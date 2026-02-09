@@ -1,4 +1,4 @@
-use app_lib::commands::{FolderHistory, FolderInfo, ImageHistory, ImageState};
+use app_lib::commands::{FolderHistory, FolderHistoryItem, FolderInfo, ImageHistory, ImageState};
 use app_lib::db::Db;
 use app_lib::img_loader::ImageLoader;
 use std::io::Cursor;
@@ -84,12 +84,18 @@ fn handle_request(
                     -1
                 } else {
                     current_id_opt
-                        .and_then(|id| history.iter().position(|(fid, _, _)| *fid == id))
+                        .and_then(|id| history.iter().position(|(fid, _, _, _)| *fid == id))
                         .unwrap_or(usize::MAX) as i64
                 };
-                let paths: Vec<String> = history.into_iter().map(|(_, p, _)| p).collect();
+                let items: Vec<FolderHistoryItem> = history
+                    .into_iter()
+                    .map(|(_, p, _, image_count)| FolderHistoryItem {
+                        path: p,
+                        image_count,
+                    })
+                    .collect();
                 let history = FolderHistory {
-                    history: paths,
+                    history: items,
                     current_index,
                 };
                 json_response(&history, StatusCode(200))

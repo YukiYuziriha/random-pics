@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { open } from '@tauri-apps/plugin-dialog';
+import { listen } from '@tauri-apps/api/event';
 import { timer } from './timer.ts';
 import {
   pickFolder,
@@ -20,9 +21,8 @@ import {
   getImageState,
   setImageState,
   fullWipe,
-  type FolderInfo,
+  type FolderHistoryItem,
   type ImageHistory,
-  type FolderHistory,
   type ImageState,
 } from './apiClient.ts';
 import { FolderControls } from './components/FolderControls.tsx';
@@ -91,7 +91,7 @@ export default function App() {
   const [imageSrc, setImageSrc] = useState('');
   const [history, setHistory] = useState<string[]>([]);
   const [historyIndex, setHistoryIndex] = useState(-1);
-  const [folderHistory, setFolderHistory] = useState<string[]>([]);
+  const [folderHistory, setFolderHistory] = useState<FolderHistoryItem[]>([]);
   const [folderHistoryIndex, setFolderHistoryIndex] = useState(-1);
   const [verticalMirror, setVerticalMirror] = useState(false);
   const [horizontalMirror, setHorizontalMirror] = useState(false);
@@ -105,6 +105,10 @@ export default function App() {
   const [showImageHistoryPanel, setShowImageHistoryPanel] = useState(true);
   const [showBottomControls, setShowBottomControls] = useState(true);
   const [isFullscreenImage, setIsFullscreenImage] = useState(false);
+  const [isIndexing, setIsIndexing] = useState(false);
+  const [indexingFolderPath, setIndexingFolderPath] = useState<string | null>(null);
+  const [indexingLogs, setIndexingLogs] = useState<string[]>([]);
+  const indexingLogContainerRef = useRef<HTMLDivElement | null>(null);
   const stopTimerRef = useRef<null | (() => void)>(null);
   const timerLoopActiveRef = useRef(false);
   const timerLoopStartSecondsRef = useRef(10);
@@ -116,14 +120,32 @@ export default function App() {
     setHistoryIndex(history.currentIndex);
   };
 
+  const appendIndexLog = (line: string) => {
+    setIndexingLogs((prev) => {
+      const next = [...prev, line];
+      return next.slice(-120);
+    });
+  };
+
+  const formatError = (err: unknown): string => {
+    if (typeof err === 'string') return err;
+    if (err && typeof err === 'object' && 'message' in err) {
+      const message = (err as { message?: unknown }).message;
+      if (typeof message === 'string' && message.length > 0) {
+        return message;
+      }
+    }
+    return String(err);
+  };
+
   const handleLoadImage = async (data: Uint8Array) => {
     const arrayBuffer = data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength) as ArrayBuffer;
-    const blob = new Blob([arrayBuffer], { type: 'image/jpeg' });
+    const blob = new Blob([arrayBuffer]);
     const url = URL.createObjectURL(blob);
     setImageSrc(url);
   };
 
-  const loadFolderHistory = async (): Promise<{ history: string[]; currentIndex: number }> => {
+  const loadFolderHistory = async (): Promise<{ history: FolderHistoryItem[]; currentIndex: number }> => {
     const data = await getFolderHistory();
     setFolderHistory(data.history);
     setFolderHistoryIndex(data.currentIndex);
@@ -157,22 +179,56 @@ export default function App() {
     });
   };
 
+  const startIndexingUi = (folderPath: string) => {
+    setIsIndexing(true);
+    setIndexingFolderPath(folderPath);
+    setIndexingLogs([`indexing:start ${folderPath}`]);
+
+    if (isTimerRunning) {
+      timerLoopActiveRef.current = false;
+      clearActiveTimer();
+      setIsTimerRunning(false);
+      appendIndexLog('timer:stopped for indexing');
+    }
+
+    setFolderHistory((prev) => {
+      const existing = prev.find((item) => item.path === folderPath);
+      const filtered = prev.filter((item) => item.path !== folderPath);
+      return [{ path: folderPath, imageCount: existing?.imageCount ?? 0 }, ...filtered];
+    });
+    setFolderHistoryIndex(0);
+  };
+
+  const endIndexingUi = (ok: boolean) => {
+    appendIndexLog(ok ? 'indexing:done' : 'indexing:error');
+    setIsIndexing(false);
+    setIndexingFolderPath(null);
+  };
+
   const handlePickFolder = async (): Promise<boolean> => {
     const selected = await open({ directory: true });
     if (!selected) return false;
     const folderPath = Array.isArray(selected) ? selected[0] : selected;
 
-    await pickFolder(folderPath);
-
-    await loadFolderHistory();
-    const imageData = await getCurrentImage();
-    await handleLoadImage(imageData);
-    const history = await getNormalHistory();
-    await loadHistory(history);
-    return true;
+    startIndexingUi(folderPath);
+    try {
+      await pickFolder(folderPath);
+      await loadFolderHistory();
+      const imageData = await getCurrentImage();
+      await handleLoadImage(imageData);
+      const history = await getNormalHistory();
+      await loadHistory(history);
+      endIndexingUi(true);
+      return true;
+    } catch (err) {
+      appendIndexLog(`error:${formatError(err)}`);
+      endIndexingUi(false);
+      throw err;
+    }
   };
 
   const ensureFolderSelected = async (): Promise<boolean> => {
+    if (isIndexing) return false;
     if (folderHistoryIndex >= 0) return true;
     return handlePickFolder();
   };
@@ -211,6 +267,34 @@ export default function App() {
     timerFlowModeRef.current = timerFlowMode;
   }, [timerFlowMode]);
 
+  useEffect(() => {
+    if (!isIndexing) return;
+    if (!isTimerRunning) return;
+    timerLoopActiveRef.current = false;
+    clearActiveTimer();
+    setIsTimerRunning(false);
+  }, [isIndexing, isTimerRunning]);
+
+  useEffect(() => {
+    let unlisten: null | (() => void) = null;
+    void listen<string>('indexing-log', (event) => {
+      appendIndexLog(event.payload);
+    }).then((fn) => {
+      unlisten = fn;
+    });
+
+    return () => {
+      unlisten?.();
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!isIndexing) return;
+    const panel = indexingLogContainerRef.current;
+    if (!panel) return;
+    panel.scrollTop = panel.scrollHeight;
+  }, [isIndexing, indexingLogs]);
+
   const historyVisualSize = 31;
   const half = Math.floor(historyVisualSize / 2);
 
@@ -231,6 +315,7 @@ export default function App() {
   });
 
   const loadForceRandomImage = async () => {
+    if (isIndexing) return;
     if (!(await ensureFolderSelected())) return;
     const imageData = await getForceRandomImage();
     await handleLoadImage(imageData);
@@ -239,6 +324,7 @@ export default function App() {
   };
 
   const handlePrevFolder = async () => {
+    if (isIndexing) return;
     if (!(await ensureFolderSelected())) return;
     await getPrevFolder();
     await loadFolderHistory();
@@ -249,16 +335,33 @@ export default function App() {
   };
 
   const handleReindexFolder = async () => {
+    if (isIndexing) return;
     if (!(await ensureFolderSelected())) return;
-    await reindexCurrentFolder();
-    await loadFolderHistory();
-    const imageData = await getCurrentImage();
-    await handleLoadImage(imageData);
-    const history = await getNormalHistory();
-    await loadHistory(history);
+    const currentFolder = folderHistory[folderHistoryIndex]?.path ?? null;
+    if (currentFolder) {
+      startIndexingUi(currentFolder);
+    } else {
+      setIsIndexing(true);
+      setIndexingLogs(['indexing:start reindex-current-folder']);
+    }
+
+    try {
+      await reindexCurrentFolder();
+      await loadFolderHistory();
+      const imageData = await getCurrentImage();
+      await handleLoadImage(imageData);
+      const history = await getNormalHistory();
+      await loadHistory(history);
+      endIndexingUi(true);
+    } catch (err) {
+      appendIndexLog(`error:${formatError(err)}`);
+      endIndexingUi(false);
+      throw err;
+    }
   };
 
   const handleNextFolder = async () => {
+    if (isIndexing) return;
     if (!(await ensureFolderSelected())) return;
     await getNextFolder();
     await loadFolderHistory();
@@ -269,6 +372,7 @@ export default function App() {
   };
 
   const handleFullWipe = async () => {
+    if (isIndexing) return;
     await fullWipe();
     setImageSrc('');
     setHistory([]);
@@ -278,6 +382,7 @@ export default function App() {
   };
 
   const handlePrevImage = async () => {
+    if (isIndexing) return;
     if (!(await ensureFolderSelected())) return;
     const imageData = await getPrevImage();
     await handleLoadImage(imageData);
@@ -286,6 +391,7 @@ export default function App() {
   };
 
   const handleNextImage = async () => {
+    if (isIndexing) return;
     if (!(await ensureFolderSelected())) return;
     const imageData = await getNextImage();
     await handleLoadImage(imageData);
@@ -294,6 +400,7 @@ export default function App() {
   };
 
   const handlePrevRandomImage = async () => {
+    if (isIndexing) return;
     if (!(await ensureFolderSelected())) return;
     const imageData = await getPrevRandomImage();
     await handleLoadImage(imageData);
@@ -302,6 +409,7 @@ export default function App() {
   };
 
   const handleNextRandomImage = async () => {
+    if (isIndexing) return;
     if (!(await ensureFolderSelected())) return;
     const imageData = await getNextRandomImage();
     await handleLoadImage(imageData);
@@ -310,12 +418,14 @@ export default function App() {
   };
 
   const handleResetRandomHistory = async () => {
+    if (isIndexing) return;
     await resetRandomHistory();
     const history = await getRandomHistory();
     await loadHistory(history);
   };
 
   const handleResetNormalHistory = async () => {
+    if (isIndexing) return;
     await resetNormalHistory();
     const history = await getNormalHistory();
     await loadHistory(history);
@@ -381,6 +491,7 @@ export default function App() {
   };
 
   const loadTimerFlowImage = async (): Promise<boolean> => {
+    if (isIndexing) return false;
     if (!(await ensureFolderSelected())) return false;
 
     if (timerFlowModeRef.current === 'normal') {
@@ -460,6 +571,7 @@ export default function App() {
   };
 
   const handleToggleStartStop = async () => {
+    if (isIndexing) return;
     if (isTimerRunning) {
       timerLoopActiveRef.current = false;
       clearActiveTimer();
@@ -487,6 +599,7 @@ export default function App() {
   };
 
   const handleTogglePausePlay = () => {
+    if (isIndexing) return;
     if (isTimerRunning) {
       clearActiveTimer();
       setIsTimerRunning(false);
@@ -723,6 +836,36 @@ export default function App() {
         />
       </div>
 
+      {isIndexing && (
+        <div
+          data-testid="indexing-log-panel"
+          ref={indexingLogContainerRef}
+          style={{
+            position: 'absolute',
+            left: '10px',
+            bottom: '10px',
+            width: '40vw',
+            maxWidth: '540px',
+            minHeight: '72px',
+            maxHeight: '180px',
+            overflowY: 'auto',
+            padding: '8px',
+            background: 'rgba(17, 19, 29, 0.92)',
+            border: '1px solid #414868',
+            color: '#9aa5ce',
+            fontFamily: 'monospace',
+            fontSize: '11px',
+            lineHeight: 1.35,
+            zIndex: 2,
+          }}
+        >
+          <div style={{ color: '#f2d06b', marginBottom: '4px' }}>indexing in progress...</div>
+          {indexingLogs.length === 0
+            ? <div>starting...</div>
+            : indexingLogs.map((line, idx) => <div key={`${idx}-${line}`}>{line}</div>)}
+        </div>
+      )}
+
       {showFolderHistoryPanel && (
         <HistoryPanel
           panelTestId="folder-history-panel"
@@ -730,6 +873,7 @@ export default function App() {
           listItemTestId="folder-list-item"
           items={folderWindowItems}
           currentSlotIndex={half}
+          pendingItem={indexingFolderPath}
         />
       )}
 
@@ -764,6 +908,7 @@ export default function App() {
               }}
               onReindexFolder={handleReindexFolder}
               onNextFolder={handleNextFolder}
+              disabled={isIndexing}
             />
 
             <div
@@ -778,9 +923,9 @@ export default function App() {
                 background: '#1f2335',
               }}
             >
-              <ActionButton label="reset-random-history" onClick={handleResetRandomHistory} />
-              <ActionButton label="reset_normal_history" onClick={handleResetNormalHistory} />
-              <ActionButton label="full_wipe" onClick={handleFullWipe} />
+              <ActionButton label="reset-random-history" onClick={handleResetRandomHistory} disabled={isIndexing} />
+              <ActionButton label="reset_normal_history" onClick={handleResetNormalHistory} disabled={isIndexing} />
+              <ActionButton label="full_wipe" onClick={handleFullWipe} disabled={isIndexing} />
             </div>
           </div>
         )}
@@ -844,6 +989,7 @@ export default function App() {
             remainingSeconds={remainingTimerSeconds}
             isRunning={isTimerRunning}
             timerFlowMode={timerFlowMode}
+            disabled={isIndexing}
           />
         )}
       </div>

@@ -1,7 +1,7 @@
 use crate::img_loader::ImageLoader;
 use serde::{Deserialize, Serialize};
 use std::sync::{Arc, RwLock};
-use tauri::State;
+use tauri::{AppHandle, Emitter, State};
 
 pub type ImageLoaderState = Arc<RwLock<Option<Arc<ImageLoader>>>>;
 
@@ -19,8 +19,15 @@ pub struct ImageHistory {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
+pub struct FolderHistoryItem {
+    pub path: String,
+    #[serde(rename = "imageCount")]
+    pub image_count: i64,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
 pub struct FolderHistory {
-    pub history: Vec<String>,
+    pub history: Vec<FolderHistoryItem>,
     #[serde(rename = "currentIndex")]
     pub current_index: i64,
 }
@@ -73,10 +80,16 @@ fn get_loader(state: &State<ImageLoaderState>) -> Result<Arc<ImageLoader>, Comma
 #[tauri::command]
 pub async fn pick_folder(
     path: String,
+    app: AppHandle,
     state: State<'_, ImageLoaderState>,
 ) -> Result<FolderInfo, CommandError> {
     let loader = get_loader(&state)?;
-    let (id, folder_path) = loader.set_current_folder_and_index(&path).await?;
+    let _ = app.emit("indexing-log", format!("folder:{}", path));
+    let (id, folder_path) = loader
+        .set_current_folder_and_index_with_progress(&path, |line| {
+            let _ = app.emit("indexing-log", line);
+        })
+        .await?;
     Ok(FolderInfo {
         id,
         path: folder_path,
@@ -122,26 +135,35 @@ pub async fn get_folder_history(
         match current_id {
             Some(id) => history
                 .iter()
-                .position(|(fid, _, _)| *fid == id)
+                .position(|(fid, _, _, _)| *fid == id)
                 .unwrap_or(usize::MAX) as i64,
             None => -1,
         }
     };
 
-    let paths: Vec<String> = history.into_iter().map(|(_, path, _)| path).collect();
+    let items: Vec<FolderHistoryItem> = history
+        .into_iter()
+        .map(|(_, path, _, image_count)| FolderHistoryItem { path, image_count })
+        .collect();
 
     Ok(FolderHistory {
-        history: paths,
+        history: items,
         current_index,
     })
 }
 
 #[tauri::command]
 pub async fn reindex_current_folder(
+    app: AppHandle,
     state: State<'_, ImageLoaderState>,
 ) -> Result<FolderInfo, CommandError> {
     let loader = get_loader(&state)?;
-    let (id, path) = loader.reindex_current_folder().await?;
+    let _ = app.emit("indexing-log", "reindex:start".to_string());
+    let (id, path) = loader
+        .reindex_current_folder_with_progress(|line| {
+            let _ = app.emit("indexing-log", line);
+        })
+        .await?;
     Ok(FolderInfo { id, path })
 }
 
