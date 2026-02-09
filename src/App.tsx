@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { open } from '@tauri-apps/plugin-dialog';
 import { listen } from '@tauri-apps/api/event';
+import { getCurrentWindow } from '@tauri-apps/api/window';
 import { timer } from './timer.ts';
 import {
   pickFolder,
@@ -138,6 +139,12 @@ export default function App() {
     return String(err);
   };
 
+  const isTypingTarget = (target: EventTarget | null): boolean => {
+    if (!(target instanceof Element)) return false;
+    const tag = target.tagName.toLowerCase();
+    return tag === 'input' || tag === 'textarea' || target.hasAttribute('contenteditable');
+  };
+
   const handleLoadImage = async (data: Uint8Array) => {
     const arrayBuffer = data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength) as ArrayBuffer;
     const blob = new Blob([arrayBuffer]);
@@ -190,13 +197,6 @@ export default function App() {
       setIsTimerRunning(false);
       appendIndexLog('timer:stopped for indexing');
     }
-
-    setFolderHistory((prev) => {
-      const existing = prev.find((item) => item.path === folderPath);
-      const filtered = prev.filter((item) => item.path !== folderPath);
-      return [{ path: folderPath, imageCount: existing?.imageCount ?? 0 }, ...filtered];
-    });
-    setFolderHistoryIndex(0);
   };
 
   const endIndexingUi = (ok: boolean) => {
@@ -287,6 +287,53 @@ export default function App() {
       unlisten?.();
     };
   }, []);
+
+  useEffect(() => {
+    const handleContextMenu = (event: MouseEvent) => {
+      event.preventDefault();
+    };
+
+    globalThis.addEventListener('contextmenu', handleContextMenu);
+    return () => {
+      globalThis.removeEventListener('contextmenu', handleContextMenu);
+    };
+  }, []);
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (isTypingTarget(event.target)) return;
+
+      if (event.key === 'F11') {
+        event.preventDefault();
+        void (async () => {
+          const win = getCurrentWindow();
+          const isFullscreen = await win.isFullscreen();
+          await win.setFullscreen(!isFullscreen);
+        })();
+        return;
+      }
+
+      if (event.key.toLowerCase() === 'f') {
+        event.preventDefault();
+        void handleToggleFullscreen();
+      }
+    };
+
+    globalThis.addEventListener('keydown', handleKeyDown);
+    return () => {
+      globalThis.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [
+    verticalMirror,
+    horizontalMirror,
+    greyscale,
+    timerFlowMode,
+    showFolderHistoryPanel,
+    showTopControls,
+    showImageHistoryPanel,
+    showBottomControls,
+    isFullscreenImage,
+  ]);
 
   useEffect(() => {
     if (!isIndexing) return;
