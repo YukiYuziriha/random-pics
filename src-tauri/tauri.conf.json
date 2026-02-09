@@ -12,8 +12,8 @@
     "windows": [
       {
         "title": "Random Pics",
-        "width": 800,
-        "height": 500,
+        "width": 1200,
+        "height": 780,
         "minWidth": 400,
         "minHeight": 200,
         "resizable": true,

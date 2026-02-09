@@ -7,12 +7,30 @@ use db::Db;
 use img_loader::ImageLoader;
 use std::sync::Arc;
 use tauri::Manager;
+use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Shortcut, ShortcutState};
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    let f11 = Shortcut::new(None, Code::F11);
+    let f11_for_handler = f11.clone();
+
     tauri::Builder::default()
         .manage(ImageLoaderState::new(std::sync::RwLock::new(None)))
-        .setup(|app| {
+        .plugin(
+            tauri_plugin_global_shortcut::Builder::new()
+                .with_handler(move |app, shortcut, event| {
+                    if shortcut == &f11_for_handler && event.state() == ShortcutState::Pressed {
+                        if let Some(win) = app.get_webview_window("main") {
+                            if let Ok(is_fullscreen) = win.is_fullscreen() {
+                                let _ = win.set_fullscreen(!is_fullscreen);
+                            }
+                        }
+                    }
+                })
+                .build(),
+        )
+        .plugin(tauri_plugin_window_state::Builder::default().build())
+        .setup(move |app| {
             let db_path = db::get_db_path(app.handle())?;
             let db = Db::open(db_path)?;
             let loader = Arc::new(ImageLoader::new(db));
@@ -29,6 +47,7 @@ pub fn run() {
                 )?;
             }
             app.handle().plugin(tauri_plugin_dialog::init())?;
+            app.global_shortcut().register(f11.clone())?;
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
