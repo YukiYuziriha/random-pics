@@ -18,6 +18,7 @@ type ImageControlsProps = {
   initialSeconds: number;
   remainingSeconds: number;
   isRunning: boolean;
+  isStartStopCaptureActive?: boolean;
   timerFlowMode: 'random' | 'normal';
   disabled?: boolean;
   shortcutHintsVisible?: boolean;
@@ -41,6 +42,7 @@ export function ImageControls({
   initialSeconds,
   remainingSeconds,
   isRunning,
+  isStartStopCaptureActive = false,
   timerFlowMode,
   disabled = false,
   shortcutHintsVisible = false,
@@ -58,9 +60,9 @@ export function ImageControls({
         <div
           key={actionId}
           style={{
-            background: '#24283b',
-            color: '#c0caf5',
-            border: '1px solid #565f89',
+            background: isStartStopCaptureActive ? '#2b3550' : '#24283b',
+            color: isStartStopCaptureActive ? '#7aa2f7' : '#c0caf5',
+            border: isStartStopCaptureActive ? '1px solid #7aa2f7' : '1px solid #565f89',
             borderRadius: '2px',
             fontFamily: 'monospace',
             fontSize: '12px',
@@ -78,7 +80,7 @@ export function ImageControls({
             style={{
               border: 'none',
               background: 'transparent',
-              color: '#c0caf5',
+              color: isStartStopCaptureActive ? '#7aa2f7' : '#c0caf5',
               fontFamily: 'monospace',
               fontSize: '12px',
               letterSpacing: '0.04em',
@@ -99,11 +101,18 @@ export function ImageControls({
             onChange={(e) => {
               onInitialSecondsChange(Number(e.target.value));
             }}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                onInitialSecondsChange(Number(e.currentTarget.value));
+                e.currentTarget.blur();
+              }
+            }}
             style={{
               border: 'none',
               outline: 'none',
               background: 'transparent',
-              color: '#c0caf5',
+              color: isStartStopCaptureActive ? '#7aa2f7' : '#c0caf5',
               fontFamily: 'monospace',
               fontSize: '12px',
               width: '3ch',
@@ -161,6 +170,13 @@ export function ImageControls({
             disabled={disabled}
             onChange={(e) => {
               onRemainingSecondsChange(Number(e.target.value));
+            }}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                onRemainingSecondsChange(Number(e.currentTarget.value));
+                e.currentTarget.blur();
+              }
             }}
             style={{
               border: 'none',

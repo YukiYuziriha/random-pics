@@ -1,192 +1,106 @@
-# Dual-Hand Shortcut System Plan
+# Timer + Fullscreen + Shortcut Capture Plan (No Code)
 
-## First Priorities
+## Scope Restatement
 
-- Normalize all button labels to kebab-case (`have-this-case`), never snake_case (`not_this_case`).
-- Do not show bracketed shortcut hints on `start/stop` and `play/pause` controls.
-- Persist shortcut hint visibility and shown side (`hide/view`, `left/right`) in DB across sessions.
+Implement behavior changes without introducing new shortcut systems outside existing architecture:
 
-## Objective
+1. Show countdown at bottom-right only in app fullscreen image mode.
+2. Hide that countdown when timer is not active.
+3. Manual image navigation (prev/next in normal and random) resets countdown to start duration and continues timer loop.
+4. Manual navigation reset must not trigger immediate auto-serve.
+5. Timer value input should commit on blur, Enter, and Space.
+6. While holding `z` (left layout) or `/` (right layout), capture numeric typing into start/stop timer value.
+7. During that hold-capture mode, block all other shortcuts (including numeric shortcuts).
+8. On release of hold key, update initial/start-stop timer value only; do not alter current remaining play/pause value or restart/pause running timer.
 
-Implement a dual-hand shortcut system where:
+## Existing Patterns To Reuse
 
-- Every action has two always-active keys: one left-hand key and one right-hand key.
-- The shortcut hint UI is toggled with `Ctrl` (toggle mode, not hold).
-- The visible shortcut side (left vs right) is toggled with `Alt` (toggle mode, not hold).
-- Only one side is shown on buttons at a time, but both sides always work.
-- Shortcut data comes from a single source of truth with explicit `left` and `right` keys.
+- Keyboard dispatch is centralized in `src/App.tsx` (`handleKeyDown` inside the keydown effect).
+- Shortcut lookup source of truth is `src/shortcuts.ts` (`SHORTCUT_REGISTRY` + `findActionByKey`).
+- Timer lifecycle is centralized in `src/App.tsx` (`clearActiveTimer`, `startTimerCycle`, `handleToggleStartStop`, `handleTogglePausePlay`).
+- Manual image navigation handlers already exist in `src/App.tsx` (`handlePrevImage`, `handleNextImage`, `handlePrevRandomImage`, `handleNextRandomImage`).
+- Fullscreen rendering is isolated in `src/App.tsx` early return (`if (isFullscreenImage)`).
+- Timer inputs are rendered in `src/components/ImageControls.tsx` and routed to App handlers.
 
-## Current Codebase Findings
+## Implementation Plan
 
-### Keyboard handling
+### 1) Add dedicated hold-to-edit capture mode in keyboard layer
 
-- Keyboard events are handled in `src/App.tsx` via one global `keydown` listener.
-- Current key actions:
-  - `F11` toggles OS fullscreen.
-  - `f` toggles in-app fullscreen (`isFullscreenImage`).
-- No current shortcut mapping object exists; controls are button-driven.
+Target: `src/App.tsx` key handling effect.
 
-### Control rendering
+- Introduce explicit capture state/refs for:
+  - whether capture mode is active,
+  - which modifier key is held (`z` or `/`),
+  - typed numeric buffer.
+- Add `keydown`/`keyup` handling so that:
+  - pressing and holding `z` or `/` enters capture mode,
+  - while active, all normal shortcut routing is bypassed,
+  - only numeric editing keys are accepted (`0-9`, `Backspace`, `Enter`, `Space`),
+  - `Enter`/`Space` commits current buffer into initial/start-stop timer value,
+  - releasing held modifier key commits buffer and exits capture mode.
+- Prevent default behavior for consumed keys in capture mode so no accidental shortcut actions fire.
+- Keep this logic inside the existing keyboard lifecycle pattern (single centralized event management).
 
-- Action buttons are rendered with plain text labels via `src/components/ActionButton.tsx`.
-- Image controls and folder controls are composed in:
-  - `src/components/ImageControls.tsx`
-  - `src/components/FolderControls.tsx`
-- There is no existing shortcut hint layer or side-switching state.
+### 2) Commit semantics for timer value inputs (blur + Enter + Space)
 
-### Persistence and state patterns
+Target: `src/components/ImageControls.tsx` (UI events), `src/App.tsx` (existing setter handlers).
 
-- UI state persistence already exists for image/view settings in `src/App.tsx` through `setImageState`.
-- `localStorage` is already used for non-backend UI preferences (timer seconds, folder history mode).
-- Shortcut visibility/side will be persisted in DB (not localStorage), aligned with other persistent UI state.
+- Keep App-level numeric sanitation ownership unchanged (`sanitizeSeconds`, `handleInitialTimerSecondsChange`, `handleRemainingTimerSecondsChange`).
+- Adjust input event wiring so commit happens on:
+  - blur,
+  - Enter,
+  - Space.
+- Ensure this applies to timer value entry behavior consistently with existing UI structure.
 
-## Single Source of Truth Design
+### 3) Manual navigation should restart countdown only (no immediate serve)
 
-Create one centralized shortcut registry (frontend-only) that defines all actions and keys.
+Target: `src/App.tsx` navigation handlers.
 
-### Registry shape
+- Add a small helper in App timer domain for "restart countdown after manual navigation" that:
+  - runs only when timer loop is currently active/running,
+  - resets remaining seconds to initial loop start value,
+  - restarts timer cycle from that value,
+  - does not call image-serving logic directly.
+- Invoke this helper after successful manual navigation in:
+  - `handlePrevImage`,
+  - `handleNextImage`,
+  - `handlePrevRandomImage`,
+  - `handleNextRandomImage`.
+- Keep existing history-loading behavior untouched.
 
-Each shortcut entry should include:
+### 4) Fullscreen bottom-right timer display
 
-- `actionId`: stable identifier used by keyboard dispatch and UI labels.
-- `label`: base label text used on controls.
-- `leftKey`: explicit left-hand key.
-- `rightKey`: explicit right-hand key.
-- `handler`: function reference already implemented in `App.tsx`.
-- `isDisabled`: derived from existing states (for example indexing lock).
+Target: fullscreen render branch in `src/App.tsx`.
 
-### Planned mappings (authoritative)
+- Add a lightweight overlay element positioned bottom-right in fullscreen image view.
+- Render it only when `isTimerRunning` is true.
+- Display current `remainingTimerSeconds` there.
+- Preserve existing fullscreen exit control and hover-reveal behavior.
 
-- vertical mirror: left `c`, right `,`
-- horizontal mirror: left `v`, right `m`
-- grayscale: left `b`, right `n`
-- next normal: left `f`, right `k`
-- prev normal: left `d`, right `j`
-- next random: left `g`, right `l`
-- prev random: left `s`, right `h`
-- start/stop: left `t`, right `y`
-- play/pause: left `r`, right `u`
-- force new random: left `w`, right `o`
-- toggle order (normal/random): left `q`, right `p`
-- next folder: left `5`, right `7`
-- prev folder: left `4`, right `6`
-- reindex folder: left `3`, right `8`
-- pick folder: left `2`, right `9`
-- show/hide shortcut hints: `Ctrl` (toggle state)
-- switch shown side: `Alt` (toggle `left`/`right`)
+### 5) Guarantee hold-capture changes only initial/start-stop value
 
-## State Model
+Target: integration between capture mode and timer setters in `src/App.tsx`.
 
-Add shortcut UI state in `App.tsx`:
+- Route capture commits exclusively through initial timer setter path.
+- Do not call remaining timer setter from hold-capture flow.
+- Do not pause, stop, clear, restart, or otherwise alter current running cycle when capture commit occurs.
+- Running timer continues with current remaining value; new initial value applies to future cycles/stops as intended.
 
-- `shortcutHintsVisible: boolean` (toggled by `Ctrl`)
-- `shortcutHintSide: 'left' | 'right'` (toggled by `Alt`)
+## Docs Update Plan
 
-DB persistence (required):
+Update `docs/shortcuts-and-button-layout.md` to include:
 
-- extend persisted image/UI state schema to include:
-  - `shortcutHintsVisible`
-  - `shortcutHintSide`
-- load both values from DB during app initialization via existing image state load flow.
-- write both values to DB whenever `Ctrl` or `Alt` toggles them.
-- default on first launch:
-  - `shortcutHintsVisible = false`
-  - `shortcutHintSide = 'left'`
+- Hold-capture mode for `z`/`/`.
+- Explicit rule that while hold-capture is active, other shortcuts are blocked.
+- Commit keys (`Enter`, `Space`) and release-commit behavior.
 
-## Keyboard Event Logic Plan
+## Verification Checklist (manual)
 
-Refactor keydown handling in `src/App.tsx` to route through the shortcut registry.
-
-### Dispatch rules
-
-- Normalize key input once per event.
-- First handle toggle keys:
-  - `Ctrl` flips visibility state.
-  - `Alt` flips visible side.
-- Then handle action keys:
-  - Match against both `leftKey` and `rightKey` for every action.
-  - Execute mapped handler regardless of currently shown side.
-- Maintain existing `isIndexing` and folder availability protections by reusing existing handlers.
-
-### Existing fullscreen key conflict
-
-- `f` is currently used for fullscreen toggle, but requested mapping assigns `f` to next normal image.
-- Plan: remove `f` as fullscreen key and keep fullscreen only on `F11` and the fullscreen button.
-
-### Repeat-key behavior
-
-- Prevent repeated toggles from key auto-repeat on `Ctrl`/`Alt` by ignoring repeat events for these toggle keys.
-- Keep repeat behavior for navigation/action keys unchanged unless explicitly changed later.
-
-## UI Rendering Plan
-
-### Button label formatting
-
-- When hints are hidden: show existing labels unchanged.
-- When hints are visible:
-  - show current side key only, prefixed in brackets.
-  - format: `[c]vertical-mirror` for left side example.
-  - when side switched: `[,]vertical-mirror` for right side example.
-- Exception:
-  - `start/stop` and `play/pause` controls show no `[]` key prefix even when hints are visible.
-
-### Where hints appear
-
-- Apply hint labels to all mapped actions in:
-  - `FolderControls` buttons
-  - `ImageControls` action buttons
-  - timer start/stop and play/pause controls
-  - flow mode toggle button (order toggle)
-- Keep non-mapped utility buttons unchanged.
-
-### Left/right table stability requirement
-
-- Preserve button order as currently rendered.
-- Treat first key in registry as left and second as right only (no inference).
-
-## File-Level Implementation Plan
-
-- `src/App.tsx`
-  - introduce shortcut registry and centralized key dispatcher.
-  - add toggle UI state for hints visibility and shown side.
-  - pass computed shortcut labels/keys to child controls.
-  - resolve `f` key conflict by removing fullscreen binding from `f`.
-- `src/apiClient.ts`
-  - extend `ImageState` type with shortcut hint visibility and side fields.
-- `src-tauri/src/db.rs` and related persistence layer
-  - add schema migration for new persisted shortcut UI fields.
-  - ensure existing DB data is preserved during migration.
-- `src-tauri/src/img_loader.rs` and command wiring
-  - include new shortcut UI fields in get/set image state read/write paths.
-- `src/components/ActionButton.tsx`
-  - support displaying a computed shortcut prefix in label rendering.
-- `src/components/FolderControls.tsx`
-  - accept shortcut metadata/labels per button and render accordingly.
-- `src/components/ImageControls.tsx`
-  - accept shortcut metadata/labels for all mapped controls and render accordingly.
-- `README.md` and/or `docs/*`
-  - update shortcut behavior documentation to reflect dual-hand always-active model and Ctrl/Alt toggles.
-
-## Validation Plan
-
-### Functional checks
-
-- Every mapped action responds to both left and right keys.
-- Ctrl toggles hint visibility state each press.
-- Alt toggles shown side each press.
-- Hint text updates correctly to selected side while both key sets remain active.
-- Start/stop, play/pause, order toggle, and folder actions respond via both mappings.
-- No regression in indexing lock behavior and folder-required actions.
-- Fullscreen still works via `F11` and UI button.
-
-### Build/type checks
-
-- Run `bun tsc` after implementation changes.
-
-## Open Logic Question
-
-Should shortcut actions still fire when keyboard focus is inside the timer numeric inputs?
-
-- Current behavior blocks key shortcuts while typing in inputs.
-- If this remains, "always active" will apply globally except active text inputs.
-- If changed, shortcuts will trigger even during input editing.
+1. Enter fullscreen via button and via `x`/`.`; confirm timer appears only when running.
+2. Stop timer; confirm fullscreen timer overlay disappears.
+3. Start timer, manually navigate prev/next in normal and random; confirm countdown resets to initial value and keeps running.
+4. Confirm no instant extra image serve occurs after manual navigation reset.
+5. In timer input, test blur, Enter, Space commits.
+6. Hold `z` and type digits; verify no other shortcuts trigger; release commits initial value only.
+7. Hold `/` and repeat above in right layout.
+8. While timer is actively counting down, hold-edit initial value; confirm current remaining countdown continues unchanged.

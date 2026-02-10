@@ -11,6 +11,9 @@ If you touch-type, the UI shortcuts should feel natural on first use.
 - offers quick image aids: mirror and greyscale
 - keeps session history so you can jump back easily
 
+## additional shortcuts
+- hold **z** or **/** key, enter number of seconds, release key to update start/stop timer value
+
 ## dev run
 Requirements:
 - Bun

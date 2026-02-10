@@ -35,6 +35,14 @@ This prevents empty hint artifacts such as `[]reset-random-history`.
 - Both left and right keys remain active for key handling, independent of visible side.
 - Function keys are handled directly for panel toggles (`F2/F6`, `F3/F7`, `F4/F8`, `F5/F9`).
 - Action key presses are resolved through `findActionByKey` against `SHORTCUT_REGISTRY`.
+- Holding `z` (left layout) or `/` (right layout) enters timer value capture mode.
+  - While in capture mode, all other shortcuts are blocked.
+  - Numeric keys (`0-9`), `Backspace`, `Enter`, and `Space` are accepted for editing.
+  - The start/stop timer control is visually highlighted while capture mode is active.
+  - `Enter` or `Space` commits the typed value and exits capture mode.
+  - Releasing the held modifier key (`z` or `/`) also commits the typed value and exits capture mode.
+  - Committed value updates the initial timer duration (start/stop button value) only.
+  - The remaining timer countdown is not affected by capture mode commits.
 
 ## Display Order Model
 
