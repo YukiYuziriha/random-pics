@@ -50,6 +50,7 @@ export function ImageControls({
   const playPauseLabel = getShortcutLabel('play-pause', shortcutHintSide, shortcutHintsVisible).replace('play-pause', isRunning ? 'pause' : 'play');
   const row1ActionIds = getShortcutDisplayOrder('bottom-row-1', shortcutHintSide);
   const row2ActionIds = getShortcutDisplayOrder('bottom-row-2', shortcutHintSide);
+  const row2EffectActionIds = getShortcutDisplayOrder('bottom-row-2-effects', shortcutHintSide);
 
   const renderRow1Action = (actionId: string) => {
     if (actionId === 'start-stop') {
@@ -239,6 +240,19 @@ export function ImageControls({
     }
   };
 
+  const renderRow2EffectAction = (actionId: string) => {
+    switch (actionId) {
+      case 'vertical-mirror':
+        return <ActionButton key={actionId} label={getShortcutLabel(actionId, shortcutHintSide, shortcutHintsVisible)} onClick={onToggleVerticalMirror} disabled={disabled} />;
+      case 'horizontal-mirror':
+        return <ActionButton key={actionId} label={getShortcutLabel(actionId, shortcutHintSide, shortcutHintsVisible)} onClick={onToggleHorizontalMirror} disabled={disabled} />;
+      case 'grayscale':
+        return <ActionButton key={actionId} label={getShortcutLabel(actionId, shortcutHintSide, shortcutHintsVisible)} onClick={onToggleGreyscale} disabled={disabled} />;
+      default:
+        return null;
+    }
+  };
+
   return (
     <div
       data-testid="image-buttons-row"
@@ -270,6 +284,31 @@ export function ImageControls({
 
       <div
         style={{
+          display: 'flex',
+          flexDirection: 'row',
+          alignItems: 'center',
+          justifyContent: 'center',
+          gap: '8px',
+          flexWrap: 'wrap',
+        }}
+      >
+        <div
+          style={{
+            border: '1px solid #414868',
+            background: '#1f2335',
+            padding: '8px',
+            flexDirection: 'row',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '6px',
+            flexWrap: 'wrap',
+          }}
+        >
+          {row2ActionIds.map(renderRow2Action)}
+        </div>
+
+        <div
+          style={{
           border: '1px solid #414868',
           background: '#1f2335',
           padding: '8px',
@@ -279,8 +318,9 @@ export function ImageControls({
           gap: '6px',
           flexWrap: 'wrap',
         }}
-      >
-        {row2ActionIds.map(renderRow2Action)}
+        >
+          {row2EffectActionIds.map(renderRow2EffectAction)}
+        </div>
       </div>
     </div>
   );

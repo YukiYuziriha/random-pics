@@ -9,7 +9,7 @@ export type ShortcutAction = {
 };
 
 export type ShortcutSide = 'left' | 'right';
-export type ShortcutLayoutSection = 'bottom-row-1' | 'bottom-row-2' | 'folder-controls';
+export type ShortcutLayoutSection = 'bottom-row-1' | 'bottom-row-2' | 'bottom-row-2-effects' | 'folder-controls';
 
 export const SHORTCUT_REGISTRY: ShortcutAction[] = [
   { id: 'vertical-mirror', label: 'vertical-mirror', leftKey: 'c', rightKey: ',', showHint: true },
@@ -50,6 +50,10 @@ const SHORTCUT_DISPLAY_ORDER: Record<ShortcutLayoutSection, Record<ShortcutSide,
   'bottom-row-2': {
     left: ['prev-random', 'prev-normal', 'next-normal', 'next-random'],
     right: ['prev-random', 'prev-normal', 'next-normal', 'next-random'],
+  },
+  'bottom-row-2-effects': {
+    left: ['vertical-mirror', 'horizontal-mirror', 'grayscale'],
+    right: ['grayscale', 'horizontal-mirror', 'vertical-mirror'],
   },
   'folder-controls': {
     left: ['prev-folder', 'next-folder', 'reindex-folder', 'pick-folder'],

@@ -165,6 +165,8 @@ export default function App() {
   const timerLoopStartSecondsRef = useRef(10);
   const timerCycleIdRef = useRef(0);
   const timerFlowModeRef = useRef<TimerFlowMode>('random');
+  const shortcutHintsVisibleRef = useRef(false);
+  const shortcutHintSideRef = useRef<'left' | 'right'>('left');
 
   const loadHistory = async (history: ImageHistory, mode: 'normal' | 'random') => {
     setHistory(history.history);
@@ -281,6 +283,8 @@ export default function App() {
     setIsFullscreenImage(data.isFullscreenImage);
     setShortcutHintsVisible(data.shortcutHintsVisible);
     setShortcutHintSide(data.shortcutHintSide);
+    shortcutHintsVisibleRef.current = data.shortcutHintsVisible;
+    shortcutHintSideRef.current = data.shortcutHintSide;
   };
 
   const persistImageState = async (state: PersistedUiState) => {
@@ -386,6 +390,14 @@ export default function App() {
   }, [timerFlowMode]);
 
   useEffect(() => {
+    shortcutHintsVisibleRef.current = shortcutHintsVisible;
+  }, [shortcutHintsVisible]);
+
+  useEffect(() => {
+    shortcutHintSideRef.current = shortcutHintSide;
+  }, [shortcutHintSide]);
+
+  useEffect(() => {
     if (!isIndexing) return;
     if (!isTimerRunning) return;
     timerLoopActiveRef.current = false;
@@ -425,7 +437,8 @@ export default function App() {
       // Handle toggle keys (ignore repeats)
       if (event.key === 'Control' && !event.repeat) {
         event.preventDefault();
-        const next = !shortcutHintsVisible;
+        const next = !shortcutHintsVisibleRef.current;
+        shortcutHintsVisibleRef.current = next;
         setShortcutHintsVisible(next);
         void persistImageState({
           verticalMirror,
@@ -438,14 +451,15 @@ export default function App() {
           showBottomControls,
           isFullscreenImage,
           shortcutHintsVisible: next,
-          shortcutHintSide,
+          shortcutHintSide: shortcutHintSideRef.current,
         });
         return;
       }
 
       if (event.key === 'Alt' && !event.repeat) {
         event.preventDefault();
-        const next = shortcutHintSide === 'left' ? 'right' : 'left';
+        const next = shortcutHintSideRef.current === 'left' ? 'right' : 'left';
+        shortcutHintSideRef.current = next;
         setShortcutHintSide(next);
         void persistImageState({
           verticalMirror,
@@ -457,7 +471,7 @@ export default function App() {
           showImageHistoryPanel,
           showBottomControls,
           isFullscreenImage,
-          shortcutHintsVisible,
+          shortcutHintsVisible: shortcutHintsVisibleRef.current,
           shortcutHintSide: next,
         });
         return;
