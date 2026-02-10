@@ -9,6 +9,25 @@ pub struct ImageLoader {
     db: Db,
 }
 
+#[derive(Clone, Copy)]
+enum HiddenImageTable {
+    Normal,
+    Random,
+}
+
+impl HiddenImageTable {
+    fn select_sql(self) -> &'static str {
+        match self {
+            HiddenImageTable::Normal => {
+                "SELECT image_id FROM hidden_normal_images WHERE folder_id = ?1"
+            }
+            HiddenImageTable::Random => {
+                "SELECT image_id FROM hidden_random_images WHERE folder_id = ?1"
+            }
+        }
+    }
+}
+
 unsafe impl Send for ImageLoader {}
 unsafe impl Sync for ImageLoader {}
 
@@ -98,21 +117,28 @@ impl ImageLoader {
 
     fn get_hidden_image_ids(
         &self,
-        table_name: &str,
+        table: HiddenImageTable,
         folder_id: i64,
     ) -> Result<HashSet<i64>, Box<dyn std::error::Error>> {
-        let sql = format!(
-            "SELECT image_id FROM {} WHERE folder_id = ?1",
-            table_name
-        );
+        let sql = table.select_sql();
         let ids = self.db.with_conn(|conn| {
-            let mut stmt = conn.prepare(&sql)?;
+            let mut stmt = conn.prepare(sql)?;
             let rows = stmt
                 .query_map(params![folder_id], |row| row.get(0))?
                 .collect::<Result<Vec<i64>, _>>()?;
             Ok(rows)
         })?;
         Ok(ids.into_iter().collect())
+    }
+
+    fn get_visible_random_image_ids(
+        &self,
+        folder_id: i64,
+    ) -> Result<Vec<i64>, Box<dyn std::error::Error>> {
+        let mut image_ids = self.get_image_ids(folder_id)?;
+        let hidden_random_ids = self.get_hidden_image_ids(HiddenImageTable::Random, folder_id)?;
+        image_ids.retain(|id| !hidden_random_ids.contains(id));
+        Ok(image_ids)
     }
 
     fn get_normal_entries(
@@ -143,7 +169,7 @@ impl ImageLoader {
         &self,
         folder_id: i64,
     ) -> Result<Vec<(i64, i64, String)>, Box<dyn std::error::Error>> {
-        let hidden = self.get_hidden_image_ids("hidden_normal_images", folder_id)?;
+        let hidden = self.get_hidden_image_ids(HiddenImageTable::Normal, folder_id)?;
         let entries = self.get_normal_entries(folder_id)?;
         Ok(entries
             .into_iter()
@@ -177,7 +203,7 @@ impl ImageLoader {
         &self,
         folder_id: i64,
     ) -> Result<Vec<(i64, i64, String)>, Box<dyn std::error::Error>> {
-        let hidden = self.get_hidden_image_ids("hidden_random_images", folder_id)?;
+        let hidden = self.get_hidden_image_ids(HiddenImageTable::Random, folder_id)?;
         let entries = self.get_random_entries(folder_id)?;
         Ok(entries
             .into_iter()
@@ -841,9 +867,7 @@ impl ImageLoader {
         force_pointer_to_last: bool,
     ) -> Result<(Vec<u8>, bool), Box<dyn std::error::Error>> {
         let (folder_id, auto_switched) = self.ensure_images_indexed().await?;
-        let mut image_ids = self.get_image_ids(folder_id)?;
-        let hidden_random_ids = self.get_hidden_image_ids("hidden_random_images", folder_id)?;
-        image_ids.retain(|id| !hidden_random_ids.contains(id));
+        let mut image_ids = self.get_visible_random_image_ids(folder_id)?;
 
         if image_ids.is_empty() {
             return Err("all images for this folder are hidden in random mode - reindex to clear hidden images".into());
@@ -901,7 +925,7 @@ impl ImageLoader {
                     Ok(p) => p,
                     Err(_) => {
                         // Image doesn't exist in DB anymore, refresh and continue
-                        image_ids = self.get_image_ids(folder_id)?;
+                        image_ids = self.get_visible_random_image_ids(folder_id)?;
                         continue;
                     }
                 };
@@ -910,7 +934,7 @@ impl ImageLoader {
                     // Image was deleted from disk, remove it from DB and continue
                     self.delete_image_by_id(candidate)?;
                     skipped_count += 1;
-                    image_ids = self.get_image_ids(folder_id)?;
+                    image_ids = self.get_visible_random_image_ids(folder_id)?;
                     continue;
                 }
                 
@@ -1142,7 +1166,7 @@ impl ImageLoader {
 
         let visible_history = self.get_visible_random_entries(folder_id)?;
         let hidden_all_images = self
-            .get_hidden_image_ids("hidden_random_images", folder_id)?
+            .get_hidden_image_ids(HiddenImageTable::Random, folder_id)?
             .len()
             >= self.get_image_ids(folder_id)?.len();
         if visible_history.is_empty() && hidden_all_images {

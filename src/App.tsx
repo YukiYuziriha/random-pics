@@ -249,6 +249,20 @@ export default function App() {
     return data;
   };
 
+  const loadPreferredHistoryForFolder = async (folderId: number): Promise<void> => {
+    const savedMode = getFolderHistoryMode(folderId);
+    if (savedMode === 'random') {
+      const randomHistory = await getRandomHistory();
+      if (randomHistory.history.length > 0 && randomHistory.currentIndex >= 0) {
+        await loadHistory(randomHistory, 'random');
+        return;
+      }
+    }
+
+    const normalHistory = await getNormalHistory();
+    await loadHistory(normalHistory, 'normal');
+  };
+
   const loadImageState = async () => {
     const data = await getImageState();
     setVerticalMirror(data.verticalMirror);
@@ -306,9 +320,7 @@ export default function App() {
       await loadFolderHistory();
       const imageData = await getCurrentImage();
       await handleLoadImage(imageData);
-      const savedMode = getFolderHistoryMode(folderInfo.id);
-      const history = savedMode === 'normal' ? await getNormalHistory() : await getRandomHistory();
-      await loadHistory(history, savedMode);
+      await loadPreferredHistoryForFolder(folderInfo.id);
       endIndexingUi(true);
       return true;
     } catch (err) {
@@ -335,9 +347,7 @@ export default function App() {
         await handleLoadImage(imageData);
         const currentFolder = await getCurrentFolder();
         if (currentFolder) {
-          const savedMode = getFolderHistoryMode(currentFolder.id);
-          const history = savedMode === 'normal' ? await getNormalHistory() : await getRandomHistory();
-          await loadHistory(history, savedMode);
+          await loadPreferredHistoryForFolder(currentFolder.id);
         } else {
           const history = await getNormalHistory();
           await loadHistory(history, 'normal');
@@ -476,9 +486,7 @@ export default function App() {
       await loadFolderHistory();
       const imageData = await getCurrentImage();
       await handleLoadImage(imageData);
-      const savedMode = getFolderHistoryMode(folderInfo.id);
-      const history = savedMode === 'normal' ? await getNormalHistory() : await getRandomHistory();
-      await loadHistory(history, savedMode);
+      await loadPreferredHistoryForFolder(folderInfo.id);
     } catch (err) {
       await handleBackendError(err);
     }
@@ -514,9 +522,8 @@ export default function App() {
       await handleLoadImage(imageData);
     }
 
-    const savedMode = getFolderHistoryMode(currentFolder.id);
-    const nextHistory = savedMode === 'normal' ? await runOp(() => getNormalHistory()) : await runOp(() => getRandomHistory());
-    if (nextHistory) await loadHistory(nextHistory, savedMode);
+    const loaded = await runOp(() => loadPreferredHistoryForFolder(currentFolder.id));
+    if (loaded === null) return;
   };
 
   const handleImageItemClick = async (slotIndex: number) => {
@@ -558,13 +565,26 @@ export default function App() {
       if (ok === null) return;
     }
 
-    const imageData = await runOp(() => getCurrentImage());
+    if (activeHistoryMode === 'normal') {
+      const imageData = await runOp(() => getCurrentImage());
+      if (imageData) {
+        await handleLoadImage(imageData);
+      }
+
+      const nextHistory = await runOp(() => getNormalHistory());
+      if (nextHistory) await loadHistory(nextHistory, 'normal');
+      return;
+    }
+
+    const nextHistory = await runOp(() => getRandomHistory());
+    if (!nextHistory) return;
+    await loadHistory(nextHistory, 'random');
+    if (nextHistory.currentIndex < 0) return;
+
+    const imageData = await runOp(() => setRandomImageByIndex(nextHistory.currentIndex));
     if (imageData) {
       await handleLoadImage(imageData);
     }
-
-    const nextHistory = activeHistoryMode === 'normal' ? await runOp(() => getNormalHistory()) : await runOp(() => getRandomHistory());
-    if (nextHistory) await loadHistory(nextHistory, activeHistoryMode);
   };
 
   const loadForceRandomImage = async () => {
@@ -586,9 +606,8 @@ export default function App() {
     const imageData = await runOp(() => getCurrentImage());
     if (!imageData) return;
     await handleLoadImage(imageData);
-    const savedMode = getFolderHistoryMode(folderInfo.id);
-    const history = savedMode === 'normal' ? await runOp(() => getNormalHistory()) : await runOp(() => getRandomHistory());
-    if (history) await loadHistory(history, savedMode);
+    const loaded = await runOp(() => loadPreferredHistoryForFolder(folderInfo.id));
+    if (loaded === null) return;
   };
 
   const handleReindexFolder = async () => {
@@ -628,9 +647,8 @@ export default function App() {
     const imageData = await runOp(() => getCurrentImage());
     if (!imageData) return;
     await handleLoadImage(imageData);
-    const savedMode = getFolderHistoryMode(folderInfo.id);
-    const history = savedMode === 'normal' ? await runOp(() => getNormalHistory()) : await runOp(() => getRandomHistory());
-    if (history) await loadHistory(history, savedMode);
+    const loaded = await runOp(() => loadPreferredHistoryForFolder(folderInfo.id));
+    if (loaded === null) return;
   };
 
   const handleFullWipe = async () => {
