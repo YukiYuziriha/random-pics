@@ -64,6 +64,8 @@ pub fn run() {
                 commands::get_force_random_image,
                 commands::get_normal_history,
                 commands::get_random_history,
+                commands::hide_normal_history_image,
+                commands::hide_random_history_image,
                 commands::reset_normal_history,
                 commands::reset_random_history,
                 commands::get_image_state,

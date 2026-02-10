@@ -13,13 +13,23 @@ pub struct FolderInfo {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ImageHistory {
-    pub history: Vec<String>,
+    pub history: Vec<ImageHistoryItem>,
     #[serde(rename = "currentIndex")]
     pub current_index: i64,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
+pub struct ImageHistoryItem {
+    #[serde(rename = "imageId")]
+    pub image_id: i64,
+    #[serde(rename = "orderIndex")]
+    pub order_index: i64,
+    pub path: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
 pub struct FolderHistoryItem {
+    pub id: i64,
     pub path: String,
     #[serde(rename = "imageCount")]
     pub image_count: i64,
@@ -105,6 +115,10 @@ fn sanitize_error_message(raw: &str) -> String {
     if raw.contains("query returned no rows") {
         return "no data found - folder or image may have been deleted".to_string();
     }
+    if raw.contains("all images for this folder are hidden") {
+        return "all images are hidden for this folder and mode - reindex to clear hidden images"
+            .to_string();
+    }
     // Pass through all other errors as-is
     raw.to_string()
 }
@@ -118,6 +132,17 @@ fn get_loader(state: &State<ImageLoaderState>) -> Result<Arc<ImageLoader>, Comma
         .ok_or_else(|| CommandError {
             message: "ImageLoader not initialized".to_string(),
         })
+}
+
+fn resolve_dual_i64_arg(
+    snake_case: Option<i64>,
+    camel_case: Option<i64>,
+    snake_name: &str,
+    camel_name: &str,
+) -> Result<i64, CommandError> {
+    snake_case.or(camel_case).ok_or_else(|| CommandError {
+        message: format!("missing {camel_name}/{snake_name}"),
+    })
 }
 
 #[tauri::command]
@@ -185,7 +210,11 @@ pub async fn get_folder_history(
 
     let items: Vec<FolderHistoryItem> = history
         .into_iter()
-        .map(|(_, path, _, image_count)| FolderHistoryItem { path, image_count })
+        .map(|(id, path, _, image_count)| FolderHistoryItem {
+            id,
+            path,
+            image_count,
+        })
         .collect();
 
     Ok(FolderHistory {
@@ -308,6 +337,30 @@ pub async fn get_random_history(
 }
 
 #[tauri::command]
+pub async fn hide_normal_history_image(
+    image_id: Option<i64>,
+    #[allow(non_snake_case)] imageId: Option<i64>,
+    state: State<'_, ImageLoaderState>,
+) -> Result<(), CommandError> {
+    let image_id = resolve_dual_i64_arg(image_id, imageId, "image_id", "imageId")?;
+    let loader = get_loader(&state)?;
+    loader.hide_normal_history_image(image_id)?;
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn hide_random_history_image(
+    image_id: Option<i64>,
+    #[allow(non_snake_case)] imageId: Option<i64>,
+    state: State<'_, ImageLoaderState>,
+) -> Result<(), CommandError> {
+    let image_id = resolve_dual_i64_arg(image_id, imageId, "image_id", "imageId")?;
+    let loader = get_loader(&state)?;
+    loader.hide_random_history_image(image_id)?;
+    Ok(())
+}
+
+#[tauri::command]
 pub async fn reset_normal_history(state: State<'_, ImageLoaderState>) -> Result<(), CommandError> {
     let loader = get_loader(&state)?;
     loader.reset_normal_history()?;
@@ -407,9 +460,11 @@ pub async fn get_current_folder(
 
 #[tauri::command]
 pub async fn delete_folder(
-    folder_id: i64,
+    folder_id: Option<i64>,
+    #[allow(non_snake_case)] folderId: Option<i64>,
     state: State<'_, ImageLoaderState>,
 ) -> Result<(), CommandError> {
+    let folder_id = resolve_dual_i64_arg(folder_id, folderId, "folder_id", "folderId")?;
     let loader = get_loader(&state)?;
     loader.delete_folder_by_id(folder_id)?;
     Ok(())
@@ -431,4 +486,21 @@ pub async fn cleanup_stale_folders(
     }
     
     Ok(removed_paths)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::resolve_dual_i64_arg;
+
+    #[test]
+    fn resolve_dual_i64_arg_accepts_camel_case() {
+        let value = resolve_dual_i64_arg(None, Some(2), "image_id", "imageId").unwrap();
+        assert_eq!(value, 2);
+    }
+
+    #[test]
+    fn resolve_dual_i64_arg_accepts_snake_case() {
+        let value = resolve_dual_i64_arg(Some(1), None, "folder_id", "folderId").unwrap();
+        assert_eq!(value, 1);
+    }
 }

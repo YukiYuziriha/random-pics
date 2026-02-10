@@ -27,8 +27,11 @@ import {
   setRandomImageByIndex,
   getCurrentFolder,
   deleteFolder,
+  hideNormalHistoryImage,
+  hideRandomHistoryImage,
   cleanupStaleFolders,
   type FolderHistoryItem,
+  type ImageHistoryItem,
   type ImageHistory,
   type ImageState,
   type FolderInfo,
@@ -129,7 +132,7 @@ function readPersistedSeconds(key: string, fallback: number): number {
 
 export default function App() {
   const [imageSrc, setImageSrc] = useState('');
-  const [history, setHistory] = useState<string[]>([]);
+  const [history, setHistory] = useState<ImageHistoryItem[]>([]);
   const [historyIndex, setHistoryIndex] = useState(-1);
   const [folderHistory, setFolderHistory] = useState<FolderHistoryItem[]>([]);
   const [folderHistoryIndex, setFolderHistoryIndex] = useState(-1);
@@ -481,6 +484,41 @@ export default function App() {
     }
   };
 
+  const handleFolderDeleteClick = async (slotIndex: number) => {
+    if (isIndexing) return;
+    const offset = half - slotIndex;
+    const targetIndex = folderHistoryIndex + offset;
+    if (targetIndex < 0 || targetIndex >= folderHistory.length) return;
+
+    const item = folderHistory[targetIndex];
+    if (!item) return;
+    const deletedCurrent = targetIndex === folderHistoryIndex;
+
+    const ok = await runOp(() => deleteFolder(item.id));
+    if (ok === null) return;
+
+    await loadFolderHistory();
+
+    const currentFolder = await runOp(() => getCurrentFolder());
+    if (!currentFolder) {
+      setImageSrc('');
+      setHistory([]);
+      setHistoryIndex(-1);
+      return;
+    }
+
+    if (deletedCurrent) {
+      showToast(`Switched to folder: ${currentFolder.path}`);
+      const imageData = await runOp(() => getCurrentImage());
+      if (!imageData) return;
+      await handleLoadImage(imageData);
+    }
+
+    const savedMode = getFolderHistoryMode(currentFolder.id);
+    const nextHistory = savedMode === 'normal' ? await runOp(() => getNormalHistory()) : await runOp(() => getRandomHistory());
+    if (nextHistory) await loadHistory(nextHistory, savedMode);
+  };
+
   const handleImageItemClick = async (slotIndex: number) => {
     if (isIndexing) return;
     const offset = slotIndex - half;
@@ -501,6 +539,32 @@ export default function App() {
       const hist = await runOp(() => getRandomHistory());
       if (hist) await loadHistory(hist, 'random');
     }
+  };
+
+  const handleImageHideClick = async (slotIndex: number) => {
+    if (isIndexing) return;
+    const offset = slotIndex - half;
+    const targetIndex = historyIndex + offset;
+    if (targetIndex < 0 || targetIndex >= history.length) return;
+
+    const item = history[targetIndex];
+    if (!item) return;
+
+    if (activeHistoryMode === 'normal') {
+      const ok = await runOp(() => hideNormalHistoryImage(item.imageId));
+      if (ok === null) return;
+    } else {
+      const ok = await runOp(() => hideRandomHistoryImage(item.imageId));
+      if (ok === null) return;
+    }
+
+    const imageData = await runOp(() => getCurrentImage());
+    if (imageData) {
+      await handleLoadImage(imageData);
+    }
+
+    const nextHistory = activeHistoryMode === 'normal' ? await runOp(() => getNormalHistory()) : await runOp(() => getRandomHistory());
+    if (nextHistory) await loadHistory(nextHistory, activeHistoryMode);
   };
 
   const loadForceRandomImage = async () => {
@@ -571,7 +635,8 @@ export default function App() {
 
   const handleFullWipe = async () => {
     if (isIndexing) return;
-    await fullWipe();
+    const ok = await runOp(() => fullWipe());
+    if (ok === null) return;
     setImageSrc('');
     setHistory([]);
     setHistoryIndex(-1);
@@ -621,15 +686,19 @@ export default function App() {
 
   const handleResetRandomHistory = async () => {
     if (isIndexing) return;
-    await resetRandomHistory();
-    const history = await getRandomHistory();
+    const ok = await runOp(() => resetRandomHistory());
+    if (ok === null) return;
+    const history = await runOp(() => getRandomHistory());
+    if (!history) return;
     await loadHistory(history, 'random');
   };
 
   const handleResetNormalHistory = async () => {
     if (isIndexing) return;
-    await resetNormalHistory();
-    const history = await getNormalHistory();
+    const ok = await runOp(() => resetNormalHistory());
+    if (ok === null) return;
+    const history = await runOp(() => getNormalHistory());
+    if (!history) return;
     await loadHistory(history, 'normal');
   };
 
@@ -697,16 +766,20 @@ export default function App() {
     if (!(await ensureFolderSelected())) return false;
 
     if (timerFlowModeRef.current === 'normal') {
-      const imageData = await getNextImage();
+      const imageData = await runOp(() => getNextImage());
+      if (!imageData) return false;
       await handleLoadImage(imageData);
-      const history = await getNormalHistory();
+      const history = await runOp(() => getNormalHistory());
+      if (!history) return false;
       await loadHistory(history, 'normal');
       return true;
     }
 
-    const imageData = await getNextRandomImage();
+    const imageData = await runOp(() => getNextRandomImage());
+    if (!imageData) return false;
     await handleLoadImage(imageData);
-    const history = await getRandomHistory();
+    const history = await runOp(() => getRandomHistory());
+    if (!history) return false;
     await loadHistory(history, 'random');
     return true;
   };
@@ -1101,6 +1174,7 @@ export default function App() {
           currentSlotIndex={half}
           pendingItem={indexingFolderPath}
           onItemClick={handleFolderItemClick}
+          onFolderDeleteClick={handleFolderDeleteClick}
         />
       )}
 
@@ -1229,6 +1303,7 @@ export default function App() {
           items={windowItems}
           currentSlotIndex={half}
           onItemClick={handleImageItemClick}
+          onImageHideClick={handleImageHideClick}
         />
       )}
     </div>

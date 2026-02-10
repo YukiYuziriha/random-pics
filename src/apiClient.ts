@@ -13,8 +13,14 @@ export type FolderInfo = {
 };
 
 export type ImageHistory = {
-  history: string[];
+  history: ImageHistoryItem[];
   currentIndex: number;
+};
+
+export type ImageHistoryItem = {
+  imageId: number;
+  orderIndex: number;
+  path: string;
 };
 
 export type FolderHistory = {
@@ -151,6 +157,14 @@ export async function getCurrentFolder(): Promise<FolderInfo | null> {
 
 export async function deleteFolder(folderId: number): Promise<void> {
   await invoke('delete_folder', { folderId });
+}
+
+export async function hideNormalHistoryImage(imageId: number): Promise<void> {
+  await invoke('hide_normal_history_image', { imageId });
+}
+
+export async function hideRandomHistoryImage(imageId: number): Promise<void> {
+  await invoke('hide_random_history_image', { imageId });
 }
 
 export async function cleanupStaleFolders(): Promise<string[]> {

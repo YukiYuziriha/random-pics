@@ -1,6 +1,7 @@
-import type { FolderHistoryItem } from '../apiClient.ts';
+import { useState } from 'react';
+import type { FolderHistoryItem, ImageHistoryItem } from '../apiClient.ts';
 
-type HistoryItem = string | FolderHistoryItem;
+type HistoryItem = ImageHistoryItem | FolderHistoryItem;
 
 type HistoryPanelProps = {
   panelTestId: string;
@@ -10,11 +11,13 @@ type HistoryPanelProps = {
   currentSlotIndex: number;
   pendingItem?: string | null;
   onItemClick?: (slotIndex: number) => void;
+  onFolderDeleteClick?: (slotIndex: number) => void;
+  onImageHideClick?: (slotIndex: number) => void;
 };
 
 function displayLabel(item: HistoryItem): string {
-  if (typeof item === 'string') {
-    return item.split('/').pop() || item;
+  if ('imageId' in item) {
+    return item.path.split('/').pop() || item.path;
   }
 
   const folderName = item.path.split('/').pop() || item.path;
@@ -22,7 +25,7 @@ function displayLabel(item: HistoryItem): string {
 }
 
 function itemPath(item: HistoryItem): string {
-  return typeof item === 'string' ? item : item.path;
+  return item.path;
 }
 
 export function HistoryPanel({
@@ -33,7 +36,11 @@ export function HistoryPanel({
   currentSlotIndex,
   pendingItem = null,
   onItemClick,
+  onFolderDeleteClick,
+  onImageHideClick,
 }: HistoryPanelProps) {
+  const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
+
   return (
     <div
       data-testid={panelTestId}
@@ -69,11 +76,13 @@ export function HistoryPanel({
               data-testid={listItemTestId}
               key={`${i}-${item ?? 'empty'}`}
               onClick={isClickable ? () => onItemClick(i) : undefined}
+              onMouseEnter={() => setHoveredIndex(i)}
+              onMouseLeave={() => setHoveredIndex((current) => (current === i ? null : current))}
               style={{
                 height: '24px',
                 display: 'flex',
                 alignItems: 'center',
-                justifyContent: 'center',
+                justifyContent: 'space-between',
                 whiteSpace: 'nowrap',
                 overflow: 'hidden',
                 textOverflow: 'ellipsis',
@@ -83,9 +92,61 @@ export function HistoryPanel({
                 fontFamily: 'monospace',
                 borderRadius: '2px',
                 cursor: isClickable ? 'pointer' : 'default',
+                padding: '0 6px',
+                gap: '6px',
               }}
             >
-              {item ? `${displayLabel(item)}${isPending ? ' [loading...]' : ''}` : 'placeholder'}
+              {item && onFolderDeleteClick && 'imageCount' in item ? (
+                <button
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    onFolderDeleteClick(i);
+                  }}
+                  aria-label="delete-folder-from-history"
+                  style={{
+                    visibility: hoveredIndex === i ? 'visible' : 'hidden',
+                    border: 'none',
+                    background: 'transparent',
+                    color: '#f7768e',
+                    cursor: 'pointer',
+                    fontFamily: 'monospace',
+                    padding: 0,
+                    width: '14px',
+                    flexShrink: 0,
+                  }}
+                >
+                  x
+                </button>
+              ) : (
+                <span style={{ width: '14px', flexShrink: 0 }} />
+              )}
+              <span style={{ flex: 1, textAlign: 'center', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                {item ? `${displayLabel(item)}${isPending ? ' [loading...]' : ''}` : 'placeholder'}
+              </span>
+              {item && onImageHideClick && 'imageId' in item ? (
+                <button
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    onImageHideClick(i);
+                  }}
+                  aria-label="hide-image-from-history"
+                  style={{
+                    visibility: hoveredIndex === i ? 'visible' : 'hidden',
+                    border: 'none',
+                    background: 'transparent',
+                    color: '#f2d06b',
+                    cursor: 'pointer',
+                    fontFamily: 'monospace',
+                    padding: 0,
+                    width: '14px',
+                    flexShrink: 0,
+                  }}
+                >
+                  -
+                </button>
+              ) : (
+                <span style={{ width: '14px', flexShrink: 0 }} />
+              )}
             </div>
           );
         })}
