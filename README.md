@@ -3,7 +3,7 @@ Ridiculously fast desktop local image viewer for gesture drawing and reference p
 If you touch-type, the UI shortcuts should feel natural on first use.
 
 ## what it does
-- opens large image folders quickly
+- opens large image folders quickly, works natively with nested folders (folders inside folders)
 - lets you browse in order or shuffle randomly
 - **Ctrl** toggles shortcut hints, **Alt** switches left/right key side; button order updates to match keyboard rows
 - includes a timed slideshow mode for hands-free practice
