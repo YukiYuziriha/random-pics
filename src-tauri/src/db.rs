@@ -109,6 +109,8 @@ impl Db {
             rusqlite::params![],
         )?;
 
+        self.ensure_hidden_tables_and_indexes()?;
+
         self.execute(
             "INSERT OR IGNORE INTO state (id) VALUES (1)",
             rusqlite::params![],
@@ -125,6 +127,47 @@ impl Db {
         self.ensure_state_column("show_bottom_controls", "INTEGER NOT NULL DEFAULT 1")?;
         self.ensure_state_column("is_fullscreen_image", "INTEGER NOT NULL DEFAULT 0")?;
         self.ensure_state_column("last_image_id", "INTEGER")?;
+        self.ensure_hidden_tables_and_indexes()?;
+        Ok(())
+    }
+
+    fn ensure_hidden_tables_and_indexes(&self) -> Result<()> {
+        self.execute(
+            "CREATE TABLE IF NOT EXISTS hidden_normal_images (
+                folder_id INTEGER NOT NULL,
+                image_id INTEGER NOT NULL,
+                PRIMARY KEY (folder_id, image_id),
+                FOREIGN KEY (folder_id) REFERENCES folders(id),
+                FOREIGN KEY (image_id) REFERENCES images(id)
+            )",
+            rusqlite::params![],
+        )?;
+        self.execute(
+            "CREATE TABLE IF NOT EXISTS hidden_random_images (
+                folder_id INTEGER NOT NULL,
+                image_id INTEGER NOT NULL,
+                PRIMARY KEY (folder_id, image_id),
+                FOREIGN KEY (folder_id) REFERENCES folders(id),
+                FOREIGN KEY (image_id) REFERENCES images(id)
+            )",
+            rusqlite::params![],
+        )?;
+        self.execute(
+            "CREATE INDEX IF NOT EXISTS idx_hidden_normal_folder ON hidden_normal_images(folder_id)",
+            rusqlite::params![],
+        )?;
+        self.execute(
+            "CREATE INDEX IF NOT EXISTS idx_hidden_normal_image ON hidden_normal_images(image_id)",
+            rusqlite::params![],
+        )?;
+        self.execute(
+            "CREATE INDEX IF NOT EXISTS idx_hidden_random_folder ON hidden_random_images(folder_id)",
+            rusqlite::params![],
+        )?;
+        self.execute(
+            "CREATE INDEX IF NOT EXISTS idx_hidden_random_image ON hidden_random_images(image_id)",
+            rusqlite::params![],
+        )?;
         Ok(())
     }
 

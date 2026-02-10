@@ -25,6 +25,25 @@ It is focused on real logic/UI differences, not just file moves.
 2. While indexing is active, image controls are disabled to prevent overlapping actions.
 3. Timer is stopped during indexing to avoid compounded UI/backend signals.
 4. Folder and destructive controls are guarded during indexing for consistent state.
+5. History rows now support hover actions:
+   - folder history rows expose left-side delete (history-only, no filesystem delete),
+   - image history rows expose right-side hide for current mode list.
+
+## Hidden Image Behavior
+
+1. Hidden image blacklists are scoped by folder and mode:
+   - `hidden_normal_images` affects only normal traversal/history,
+   - `hidden_random_images` affects only random traversal/history.
+2. Random hidden images are excluded from both random history rendering and new random picks.
+3. Normal hidden images do not affect random mode visibility.
+4. `reset_normal_history` and `reset_random_history` preserve hidden blacklists.
+5. Reindex clears both hidden blacklists for the current folder.
+6. If all images are hidden for a folder/mode, backend returns a normalized error with reindex guidance.
+7. Hiding the currently selected image now moves the pointer to the previous visible history item (wraps), instead of resetting to the start.
+
+## Folder Delete Behavior
+
+1. Deleting the current folder now falls back to the previous folder-history item (wraps), and the UI refreshes against that folder.
 
 ## Notes on Compatibility
 
