@@ -1,5 +1,5 @@
 import { ActionButton } from './ActionButton.tsx';
-import { getShortcutLabel } from '../shortcuts.ts';
+import { getShortcutDisplayOrder, getShortcutLabel } from '../shortcuts.ts';
 
 type FolderControlsProps = {
   onPrevFolder: () => void | Promise<void>;
@@ -20,6 +20,22 @@ export function FolderControls({
   shortcutHintsVisible = false,
   shortcutHintSide = 'left',
 }: FolderControlsProps) {
+  const orderedActionIds = getShortcutDisplayOrder('folder-controls', shortcutHintSide);
+  const onClickForAction = (actionId: string): (() => void | Promise<void>) => {
+    switch (actionId) {
+      case 'prev-folder':
+        return onPrevFolder;
+      case 'next-folder':
+        return onNextFolder;
+      case 'reindex-folder':
+        return onReindexFolder;
+      case 'pick-folder':
+        return onPickFolder;
+      default:
+        return () => {};
+    }
+  };
+
   return (
     <div
       data-testid="folder-buttons-row"
@@ -34,10 +50,14 @@ export function FolderControls({
         background: '#1f2335',
       }}
     >
-      <ActionButton label={getShortcutLabel('prev-folder', shortcutHintSide, shortcutHintsVisible)} onClick={onPrevFolder} disabled={disabled} />
-      <ActionButton label={getShortcutLabel('pick-folder', shortcutHintSide, shortcutHintsVisible)} onClick={onPickFolder} disabled={disabled} />
-      <ActionButton label={getShortcutLabel('reindex-folder', shortcutHintSide, shortcutHintsVisible)} onClick={onReindexFolder} disabled={disabled} />
-      <ActionButton label={getShortcutLabel('next-folder', shortcutHintSide, shortcutHintsVisible)} onClick={onNextFolder} disabled={disabled} />
+      {orderedActionIds.map((actionId) => (
+        <ActionButton
+          key={actionId}
+          label={getShortcutLabel(actionId, shortcutHintSide, shortcutHintsVisible)}
+          onClick={onClickForAction(actionId)}
+          disabled={disabled}
+        />
+      ))}
     </div>
   );
 }

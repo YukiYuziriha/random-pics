@@ -1,5 +1,5 @@
 import { ActionButton } from './ActionButton.tsx';
-import { getShortcutLabel, getShortcutKey } from '../shortcuts.ts';
+import { getShortcutDisplayOrder, getShortcutKey, getShortcutLabel } from '../shortcuts.ts';
 
 type ImageControlsProps = {
   onPrev: () => void | Promise<void>;
@@ -48,33 +48,14 @@ export function ImageControls({
 }: ImageControlsProps) {
   const startStopLabel = getShortcutLabel('start-stop', shortcutHintSide, shortcutHintsVisible).replace('start-stop', isRunning ? 'stop' : 'start');
   const playPauseLabel = getShortcutLabel('play-pause', shortcutHintSide, shortcutHintsVisible).replace('play-pause', isRunning ? 'pause' : 'play');
-  return (
-    <div
-      data-testid="image-buttons-row"
-      style={{
-        display: 'flex',
-        flexDirection: 'row',
-        marginTop: 'auto',
-        marginBottom: '10px',
-        alignItems: 'center',
-        justifyContent: 'center',
-        gap: '8px',
-        flexWrap: 'wrap',
-      }}
-    >
-      <div
-        style={{
-          border: '1px solid #414868',
-          background: '#1f2335',
-          padding: '8px',
-          flexDirection: 'row',
-          display: 'flex',
-          alignItems: 'center',
-          gap: '6px',
-          flexWrap: 'wrap',
-        }}
-      >
+  const row1ActionIds = getShortcutDisplayOrder('bottom-row-1', shortcutHintSide);
+  const row2ActionIds = getShortcutDisplayOrder('bottom-row-2', shortcutHintSide);
+
+  const renderRow1Action = (actionId: string) => {
+    if (actionId === 'start-stop') {
+      return (
         <div
+          key={actionId}
           style={{
             background: '#24283b',
             color: '#c0caf5',
@@ -131,8 +112,13 @@ export function ImageControls({
             }}
           />
         </div>
+      );
+    }
 
+    if (actionId === 'play-pause') {
+      return (
         <div
+          key={actionId}
           style={{
             background: '#24283b',
             color: '#c0caf5',
@@ -189,8 +175,14 @@ export function ImageControls({
             }}
           />
         </div>
+      );
+    }
 
+    if (actionId === 'toggle-flow-mode') {
+      const flowKey = getShortcutKey('toggle-flow-mode', shortcutHintSide);
+      return (
         <button
+          key={actionId}
           onClick={onToggleTimerFlowMode}
           disabled={disabled}
           style={{
@@ -210,11 +202,70 @@ export function ImageControls({
             opacity: disabled ? 0.55 : 1,
           }}
         >
-          {shortcutHintsVisible && <span>[{getShortcutKey('toggle-flow-mode', shortcutHintSide)}]</span>}
+          {shortcutHintsVisible && flowKey && <span>[{flowKey}]</span>}
           <span style={{ color: timerFlowMode === 'random' ? '#f7768e' : '#8f93aa' }}>random</span>
           <span style={{ color: '#8f93aa' }}>|</span>
           <span style={{ color: timerFlowMode === 'normal' ? '#7aa2f7' : '#8f93aa' }}>normal</span>
         </button>
+      );
+    }
+
+    if (actionId === 'force-random') {
+      return (
+        <ActionButton
+          key={actionId}
+          label={getShortcutLabel('force-random', shortcutHintSide, shortcutHintsVisible)}
+          onClick={onForceRandom}
+          disabled={disabled}
+        />
+      );
+    }
+
+    return null;
+  };
+
+  const renderRow2Action = (actionId: string) => {
+    switch (actionId) {
+      case 'prev-random':
+        return <ActionButton key={actionId} label={getShortcutLabel(actionId, shortcutHintSide, shortcutHintsVisible)} onClick={onPrevRandom} disabled={disabled} />;
+      case 'prev-normal':
+        return <ActionButton key={actionId} label={getShortcutLabel(actionId, shortcutHintSide, shortcutHintsVisible)} onClick={onPrev} disabled={disabled} />;
+      case 'next-normal':
+        return <ActionButton key={actionId} label={getShortcutLabel(actionId, shortcutHintSide, shortcutHintsVisible)} onClick={onNext} disabled={disabled} />;
+      case 'next-random':
+        return <ActionButton key={actionId} label={getShortcutLabel(actionId, shortcutHintSide, shortcutHintsVisible)} onClick={onNextRandom} disabled={disabled} />;
+      default:
+        return null;
+    }
+  };
+
+  return (
+    <div
+      data-testid="image-buttons-row"
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        marginTop: 'auto',
+        marginBottom: '10px',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: '8px',
+        flexWrap: 'wrap',
+      }}
+    >
+      <div
+        style={{
+          border: '1px solid #414868',
+          background: '#1f2335',
+          padding: '8px',
+          flexDirection: 'row',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '6px',
+          flexWrap: 'wrap',
+        }}
+      >
+        {row1ActionIds.map(renderRow1Action)}
       </div>
 
       <div
@@ -229,28 +280,7 @@ export function ImageControls({
           flexWrap: 'wrap',
         }}
       >
-        <ActionButton label={getShortcutLabel('vertical-mirror', shortcutHintSide, shortcutHintsVisible)} onClick={onToggleVerticalMirror} disabled={disabled} />
-        <ActionButton label={getShortcutLabel('horizontal-mirror', shortcutHintSide, shortcutHintsVisible)} onClick={onToggleHorizontalMirror} disabled={disabled} />
-        <ActionButton label={getShortcutLabel('grayscale', shortcutHintSide, shortcutHintsVisible)} onClick={onToggleGreyscale} disabled={disabled} />
-      </div>
-
-      <div
-        style={{
-          border: '1px solid #414868',
-          background: '#1f2335',
-          padding: '8px',
-          flexDirection: 'row',
-          display: 'flex',
-          alignItems: 'center',
-          gap: '6px',
-          flexWrap: 'wrap',
-        }}
-      >
-        <ActionButton label={getShortcutLabel('prev-normal', shortcutHintSide, shortcutHintsVisible)} onClick={onPrev} disabled={disabled} />
-        <ActionButton label={getShortcutLabel('next-normal', shortcutHintSide, shortcutHintsVisible)} onClick={onNext} disabled={disabled} />
-        <ActionButton label={getShortcutLabel('prev-random', shortcutHintSide, shortcutHintsVisible)} onClick={onPrevRandom} disabled={disabled} />
-        <ActionButton label={getShortcutLabel('force-random', shortcutHintSide, shortcutHintsVisible)} onClick={onForceRandom} disabled={disabled} />
-        <ActionButton label={getShortcutLabel('next-random', shortcutHintSide, shortcutHintsVisible)} onClick={onNextRandom} disabled={disabled} />
+        {row2ActionIds.map(renderRow2Action)}
       </div>
     </div>
   );

@@ -8,6 +8,9 @@ export type ShortcutAction = {
   showHint: boolean;
 };
 
+export type ShortcutSide = 'left' | 'right';
+export type ShortcutLayoutSection = 'bottom-row-1' | 'bottom-row-2' | 'folder-controls';
+
 export const SHORTCUT_REGISTRY: ShortcutAction[] = [
   { id: 'vertical-mirror', label: 'vertical-mirror', leftKey: 'c', rightKey: ',', showHint: true },
   { id: 'horizontal-mirror', label: 'horizontal-mirror', leftKey: 'v', rightKey: 'm', showHint: true },
@@ -18,8 +21,8 @@ export const SHORTCUT_REGISTRY: ShortcutAction[] = [
   { id: 'prev-random', label: 'prev-random', leftKey: 's', rightKey: 'h', showHint: true },
   { id: 'force-random', label: 'new-random', leftKey: 'w', rightKey: 'o', showHint: true },
   { id: 'toggle-flow-mode', label: 'toggle-order', leftKey: 'q', rightKey: 'p', showHint: true },
-  { id: 'start-stop', label: 'start-stop', leftKey: 't', rightKey: 'y', showHint: false },
-  { id: 'play-pause', label: 'play-pause', leftKey: 'r', rightKey: 'u', showHint: false },
+  { id: 'start-stop', label: 'start-stop', leftKey: 't', rightKey: 'y', showHint: true },
+  { id: 'play-pause', label: 'play-pause', leftKey: 'r', rightKey: 'u', showHint: true },
   { id: 'fullscreen', label: 'fullscreen', leftKey: 'x', rightKey: '.', showHint: true },
   { id: 'exit-fullscreen', label: 'exit-fullscreen', leftKey: 'x', rightKey: '.', showHint: true },
   { id: 'next-folder', label: 'next-folder', leftKey: '7', rightKey: '5', showHint: true },
@@ -39,19 +42,46 @@ export const SHORTCUT_REGISTRY: ShortcutAction[] = [
   { id: 'full-wipe', label: 'full-wipe', leftKey: '', rightKey: '', showHint: true },
 ];
 
-export function getShortcutLabel(actionId: string, side: 'left' | 'right', hintsVisible: boolean): string {
-  const action = SHORTCUT_REGISTRY.find(a => a.id === actionId);
+const SHORTCUT_DISPLAY_ORDER: Record<ShortcutLayoutSection, Record<ShortcutSide, string[]>> = {
+  'bottom-row-1': {
+    left: ['toggle-flow-mode', 'force-random', 'play-pause', 'start-stop'],
+    right: ['start-stop', 'play-pause', 'force-random', 'toggle-flow-mode'],
+  },
+  'bottom-row-2': {
+    left: ['prev-random', 'prev-normal', 'next-normal', 'next-random'],
+    right: ['prev-random', 'prev-normal', 'next-normal', 'next-random'],
+  },
+  'folder-controls': {
+    left: ['prev-folder', 'next-folder', 'reindex-folder', 'pick-folder'],
+    right: ['pick-folder', 'reindex-folder', 'prev-folder', 'next-folder'],
+  },
+};
+
+export function getShortcutAction(actionId: string): ShortcutAction | undefined {
+  return SHORTCUT_REGISTRY.find(a => a.id === actionId);
+}
+
+export function getShortcutLabel(actionId: string, side: ShortcutSide, hintsVisible: boolean): string {
+  const action = getShortcutAction(actionId);
   if (!action || !hintsVisible || !action.showHint) {
     return action?.label ?? actionId;
   }
   const key = side === 'left' ? action.leftKey : action.rightKey;
+  if (!key) {
+    return action.label;
+  }
   return `[${key}]${action.label}`;
 }
 
-export function getShortcutKey(actionId: string, side: 'left' | 'right'): string | null {
-  const action = SHORTCUT_REGISTRY.find(a => a.id === actionId);
+export function getShortcutKey(actionId: string, side: ShortcutSide): string | null {
+  const action = getShortcutAction(actionId);
   if (!action) return null;
-  return side === 'left' ? action.leftKey : action.rightKey;
+  const key = side === 'left' ? action.leftKey : action.rightKey;
+  return key || null;
+}
+
+export function getShortcutDisplayOrder(section: ShortcutLayoutSection, side: ShortcutSide): string[] {
+  return SHORTCUT_DISPLAY_ORDER[section][side];
 }
 
 export function findActionByKey(key: string): ShortcutAction | undefined {
