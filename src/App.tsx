@@ -152,6 +152,7 @@ export default function App() {
   const [showImageHistoryPanel, setShowImageHistoryPanel] = useState(true);
   const [showBottomControls, setShowBottomControls] = useState(true);
   const [isFullscreenImage, setIsFullscreenImage] = useState(false);
+  const [isTimerHoldCaptureActive, setIsTimerHoldCaptureActive] = useState(false);
   const [shortcutHintsVisible, setShortcutHintsVisible] = useState(false);
   const [shortcutHintSide, setShortcutHintSide] = useState<'left' | 'right'>('left');
   const [isIndexing, setIsIndexing] = useState(false);
@@ -167,6 +168,9 @@ export default function App() {
   const timerFlowModeRef = useRef<TimerFlowMode>('random');
   const shortcutHintsVisibleRef = useRef(false);
   const shortcutHintSideRef = useRef<'left' | 'right'>('left');
+  const timerHoldCaptureActiveRef = useRef(false);
+  const timerHoldCaptureKeyRef = useRef<'z' | '/' | null>(null);
+  const timerHoldCaptureBufferRef = useRef('');
 
   const loadHistory = async (history: ImageHistory, mode: 'normal' | 'random') => {
     setHistory(history.history);
@@ -210,6 +214,22 @@ export default function App() {
     if (!(target instanceof Element)) return false;
     const tag = target.tagName.toLowerCase();
     return tag === 'input' || tag === 'textarea' || target.hasAttribute('contenteditable');
+  };
+
+  const commitTimerHoldCapture = () => {
+    const buffer = timerHoldCaptureBufferRef.current;
+    if (buffer.length > 0) {
+      const parsed = Number(buffer);
+      if (!Number.isNaN(parsed)) {
+        const next = sanitizeSeconds(parsed);
+        setInitialTimerSeconds(next);
+        timerLoopStartSecondsRef.current = next;
+      }
+    }
+    timerHoldCaptureBufferRef.current = '';
+    timerHoldCaptureActiveRef.current = false;
+    timerHoldCaptureKeyRef.current = null;
+    setIsTimerHoldCaptureActive(false);
   };
 
   const handleLoadImage = async (response: ImageResponse) => {
@@ -431,6 +451,42 @@ export default function App() {
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
+      const normalizedKey = event.key.toLowerCase();
+
+      if (timerHoldCaptureActiveRef.current) {
+        if (normalizedKey === 'enter' || normalizedKey === ' ') {
+          event.preventDefault();
+          commitTimerHoldCapture();
+          return;
+        }
+        if (normalizedKey === 'backspace') {
+          event.preventDefault();
+          timerHoldCaptureBufferRef.current = timerHoldCaptureBufferRef.current.slice(0, -1);
+          return;
+        }
+        if (/^[0-9]$/.test(normalizedKey)) {
+          event.preventDefault();
+          const newBuffer = timerHoldCaptureBufferRef.current + normalizedKey;
+          if (newBuffer.length <= 6) {
+            timerHoldCaptureBufferRef.current = newBuffer;
+          }
+          return;
+        }
+        event.preventDefault();
+        return;
+      }
+
+      if (normalizedKey === 'z' || normalizedKey === '/') {
+        if (!event.repeat) {
+          event.preventDefault();
+          timerHoldCaptureActiveRef.current = true;
+          timerHoldCaptureKeyRef.current = normalizedKey as 'z' | '/';
+          timerHoldCaptureBufferRef.current = '';
+          setIsTimerHoldCaptureActive(true);
+        }
+        return;
+      }
+
       // Always allow typing in input fields
       if (isTypingTarget(event.target)) return;
 
@@ -516,7 +572,6 @@ export default function App() {
       }
 
       // Handle action keys from registry
-      const normalizedKey = key.toLowerCase();
       const action = findActionByKey(normalizedKey);
       if (action) {
         event.preventDefault();
@@ -573,9 +628,18 @@ export default function App() {
       }
     };
 
+    const handleKeyUp = (event: KeyboardEvent) => {
+      const normalizedKey = event.key.toLowerCase();
+      if (timerHoldCaptureActiveRef.current && timerHoldCaptureKeyRef.current === normalizedKey) {
+        commitTimerHoldCapture();
+      }
+    };
+
     globalThis.addEventListener('keydown', handleKeyDown);
+    globalThis.addEventListener('keyup', handleKeyUp);
     return () => {
       globalThis.removeEventListener('keydown', handleKeyDown);
+      globalThis.removeEventListener('keyup', handleKeyUp);
     };
   }, [
     verticalMirror,
@@ -817,6 +881,7 @@ export default function App() {
     await handleLoadImage(res);
     const hist = await runOp(() => getNormalHistory());
     if (hist) await loadHistory(hist, 'normal');
+    resetTimerAfterManualNavigation();
   };
 
   const handleNextImage = async () => {
@@ -827,6 +892,7 @@ export default function App() {
     await handleLoadImage(res);
     const hist = await runOp(() => getNormalHistory());
     if (hist) await loadHistory(hist, 'normal');
+    resetTimerAfterManualNavigation();
   };
 
   const handlePrevRandomImage = async () => {
@@ -837,6 +903,7 @@ export default function App() {
     await handleLoadImage(res);
     const hist = await runOp(() => getRandomHistory());
     if (hist) await loadHistory(hist, 'random');
+    resetTimerAfterManualNavigation();
   };
 
   const handleNextRandomImage = async () => {
@@ -847,6 +914,7 @@ export default function App() {
     await handleLoadImage(res);
     const hist = await runOp(() => getRandomHistory());
     if (hist) await loadHistory(hist, 'random');
+    resetTimerAfterManualNavigation();
   };
 
   const handleResetRandomHistory = async () => {
@@ -930,6 +998,34 @@ export default function App() {
     timerCycleIdRef.current += 1;
     stopTimerRef.current?.();
     stopTimerRef.current = null;
+  };
+
+  const startTimerLoop = async (seconds: number, serveImageOnStart: boolean): Promise<boolean> => {
+    const startAt = sanitizeSeconds(seconds);
+    timerLoopStartSecondsRef.current = startAt;
+
+    clearActiveTimer();
+
+    if (serveImageOnStart) {
+      const loaded = await loadTimerFlowImage();
+      if (!loaded) {
+        timerLoopActiveRef.current = false;
+        setIsTimerRunning(false);
+        setRemainingTimerSeconds(startAt);
+        return false;
+      }
+    }
+
+    timerLoopActiveRef.current = true;
+    setRemainingTimerSeconds(startAt);
+    startTimerCycle(startAt);
+    return true;
+  };
+
+  const resetTimerAfterManualNavigation = () => {
+    if (!isTimerRunning) return;
+    const restartAt = sanitizeSeconds(timerLoopStartSecondsRef.current);
+    void startTimerLoop(restartAt, false);
   };
 
   const loadTimerFlowImage = async (): Promise<boolean> => {
@@ -1028,20 +1124,7 @@ export default function App() {
     }
 
     const startAt = sanitizeSeconds(initialTimerSeconds);
-    timerLoopStartSecondsRef.current = startAt;
-
-    const loaded = await loadTimerFlowImage();
-    if (!loaded) {
-      timerLoopActiveRef.current = false;
-      setIsTimerRunning(false);
-      setRemainingTimerSeconds(startAt);
-      return;
-    }
-
-    timerLoopActiveRef.current = true;
-    setRemainingTimerSeconds(startAt);
-    clearActiveTimer();
-    startTimerCycle(startAt);
+    await startTimerLoop(startAt, true);
   };
 
   const handleTogglePausePlay = () => {
@@ -1053,9 +1136,7 @@ export default function App() {
     }
 
     const restartAt = sanitizeSeconds(remainingTimerSeconds);
-    timerLoopActiveRef.current = true;
-    setRemainingTimerSeconds(restartAt);
-    startTimerCycle(restartAt);
+    void startTimerLoop(restartAt, false);
   };
 
   const handleToggleTimerFlowMode = async () => {
@@ -1226,6 +1307,26 @@ export default function App() {
             zIndex: 2,
           }}
         />
+
+        {isTimerRunning && (
+          <div
+            style={{
+              position: 'absolute',
+              right: '10px',
+              bottom: '10px',
+              background: 'rgba(17, 19, 29, 0.85)',
+              border: '1px solid #565f89',
+              borderRadius: '2px',
+              color: '#c0caf5',
+              fontFamily: 'monospace',
+              fontSize: '12px',
+              padding: '4px 8px',
+              zIndex: 2,
+            }}
+          >
+            {remainingTimerSeconds}s
+          </div>
+        )}
       </div>
     );
   }
@@ -1474,6 +1575,7 @@ export default function App() {
             initialSeconds={initialTimerSeconds}
             remainingSeconds={remainingTimerSeconds}
             isRunning={isTimerRunning}
+            isStartStopCaptureActive={isTimerHoldCaptureActive}
             timerFlowMode={timerFlowMode}
             disabled={isIndexing}
             shortcutHintsVisible={shortcutHintsVisible}
