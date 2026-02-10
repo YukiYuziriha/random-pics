@@ -81,7 +81,9 @@ impl Db {
                 show_image_history_panel INTEGER NOT NULL DEFAULT 1,
                 show_bottom_controls INTEGER NOT NULL DEFAULT 1,
                 is_fullscreen_image INTEGER NOT NULL DEFAULT 0,
-                last_image_id INTEGER
+                last_image_id INTEGER,
+                shortcut_hints_visible INTEGER NOT NULL DEFAULT 0,
+                shortcut_hint_side TEXT NOT NULL DEFAULT 'left'
             )",
             rusqlite::params![],
         )?;
@@ -127,6 +129,8 @@ impl Db {
         self.ensure_state_column("show_bottom_controls", "INTEGER NOT NULL DEFAULT 1")?;
         self.ensure_state_column("is_fullscreen_image", "INTEGER NOT NULL DEFAULT 0")?;
         self.ensure_state_column("last_image_id", "INTEGER")?;
+        self.ensure_state_column("shortcut_hints_visible", "INTEGER NOT NULL DEFAULT 0")?;
+        self.ensure_state_column("shortcut_hint_side", "TEXT NOT NULL DEFAULT 'left'")?;
         self.ensure_hidden_tables_and_indexes()?;
         Ok(())
     }

@@ -41,6 +41,7 @@ import { FolderControls } from './components/FolderControls.tsx';
 import { HistoryPanel } from './components/HistoryPanel.tsx';
 import { ImageControls } from './components/ImageControls.tsx';
 import { ActionButton } from './components/ActionButton.tsx';
+import { getShortcutLabel, findActionByKey, SHORTCUT_REGISTRY } from './shortcuts.ts';
 
 const INITIAL_TIMER_STORAGE_KEY = 'timer.initial_seconds';
 const REMAINING_TIMER_STORAGE_KEY = 'timer.remaining_seconds';
@@ -88,6 +89,8 @@ type PersistedUiState = {
   showImageHistoryPanel: boolean;
   showBottomControls: boolean;
   isFullscreenImage: boolean;
+  shortcutHintsVisible: boolean;
+  shortcutHintSide: 'left' | 'right';
 };
 
 function HoverRevealButton({
@@ -149,6 +152,8 @@ export default function App() {
   const [showImageHistoryPanel, setShowImageHistoryPanel] = useState(true);
   const [showBottomControls, setShowBottomControls] = useState(true);
   const [isFullscreenImage, setIsFullscreenImage] = useState(false);
+  const [shortcutHintsVisible, setShortcutHintsVisible] = useState(false);
+  const [shortcutHintSide, setShortcutHintSide] = useState<'left' | 'right'>('left');
   const [isIndexing, setIsIndexing] = useState(false);
   const [indexingFolderPath, setIndexingFolderPath] = useState<string | null>(null);
   const [indexingLogs, setIndexingLogs] = useState<string[]>([]);
@@ -274,6 +279,8 @@ export default function App() {
     setShowImageHistoryPanel(data.showImageHistoryPanel);
     setShowBottomControls(data.showBottomControls);
     setIsFullscreenImage(data.isFullscreenImage);
+    setShortcutHintsVisible(data.shortcutHintsVisible);
+    setShortcutHintSide(data.shortcutHintSide);
   };
 
   const persistImageState = async (state: PersistedUiState) => {
@@ -287,6 +294,8 @@ export default function App() {
       showImageHistoryPanel: state.showImageHistoryPanel,
       showBottomControls: state.showBottomControls,
       isFullscreenImage: state.isFullscreenImage,
+      shortcutHintsVisible: state.shortcutHintsVisible,
+      shortcutHintSide: state.shortcutHintSide,
     });
   };
 
@@ -410,8 +419,51 @@ export default function App() {
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
+      // Always allow typing in input fields
       if (isTypingTarget(event.target)) return;
 
+      // Handle toggle keys (ignore repeats)
+      if (event.key === 'Control' && !event.repeat) {
+        event.preventDefault();
+        const next = !shortcutHintsVisible;
+        setShortcutHintsVisible(next);
+        void persistImageState({
+          verticalMirror,
+          horizontalMirror,
+          greyscale,
+          timerFlowMode,
+          showFolderHistoryPanel,
+          showTopControls,
+          showImageHistoryPanel,
+          showBottomControls,
+          isFullscreenImage,
+          shortcutHintsVisible: next,
+          shortcutHintSide,
+        });
+        return;
+      }
+
+      if (event.key === 'Alt' && !event.repeat) {
+        event.preventDefault();
+        const next = shortcutHintSide === 'left' ? 'right' : 'left';
+        setShortcutHintSide(next);
+        void persistImageState({
+          verticalMirror,
+          horizontalMirror,
+          greyscale,
+          timerFlowMode,
+          showFolderHistoryPanel,
+          showTopControls,
+          showImageHistoryPanel,
+          showBottomControls,
+          isFullscreenImage,
+          shortcutHintsVisible,
+          shortcutHintSide: next,
+        });
+        return;
+      }
+
+      // F11 for OS fullscreen
       if (event.key === 'F11') {
         event.preventDefault();
         void (async () => {
@@ -426,9 +478,84 @@ export default function App() {
         return;
       }
 
-      if (event.key.toLowerCase() === 'f') {
+      // Handle function keys for panel toggles
+      const key = event.key;
+      if (key === 'F2' || key === 'F6') {
         event.preventDefault();
-        void handleToggleFullscreen();
+        void handleToggleFolderHistoryPanel();
+        return;
+      }
+      if (key === 'F3' || key === 'F7') {
+        event.preventDefault();
+        void handleToggleTopControls();
+        return;
+      }
+      if (key === 'F4' || key === 'F8') {
+        event.preventDefault();
+        void handleToggleBottomControls();
+        return;
+      }
+      if (key === 'F5' || key === 'F9') {
+        event.preventDefault();
+        void handleToggleImageHistoryPanel();
+        return;
+      }
+
+      // Handle action keys from registry
+      const normalizedKey = key.toLowerCase();
+      const action = findActionByKey(normalizedKey);
+      if (action) {
+        event.preventDefault();
+        switch (action.id) {
+          case 'vertical-mirror':
+            void handleToggleVerticalMirror();
+            break;
+          case 'horizontal-mirror':
+            void handleToggleHorizontalMirror();
+            break;
+          case 'grayscale':
+            void handleToggleGreyscale();
+            break;
+          case 'next-normal':
+            void handleNextImage();
+            break;
+          case 'prev-normal':
+            void handlePrevImage();
+            break;
+          case 'next-random':
+            void handleNextRandomImage();
+            break;
+          case 'prev-random':
+            void handlePrevRandomImage();
+            break;
+          case 'force-random':
+            void loadForceRandomImage();
+            break;
+          case 'toggle-flow-mode':
+            void handleToggleTimerFlowMode();
+            break;
+          case 'start-stop':
+            void handleToggleStartStop();
+            break;
+          case 'play-pause':
+            void handleTogglePausePlay();
+            break;
+          case 'fullscreen':
+            void handleToggleFullscreen();
+            break;
+          case 'next-folder':
+            void handleNextFolder();
+            break;
+          case 'prev-folder':
+            void handlePrevFolder();
+            break;
+          case 'reindex-folder':
+            void handleReindexFolder();
+            break;
+          case 'pick-folder':
+            void handlePickFolder();
+            break;
+        }
       }
     };
 
@@ -446,6 +573,12 @@ export default function App() {
     showImageHistoryPanel,
     showBottomControls,
     isFullscreenImage,
+    shortcutHintsVisible,
+    shortcutHintSide,
+    isIndexing,
+    isTimerRunning,
+    initialTimerSeconds,
+    remainingTimerSeconds,
   ]);
 
   useEffect(() => {
@@ -733,6 +866,8 @@ export default function App() {
       showImageHistoryPanel,
       showBottomControls,
       isFullscreenImage,
+      shortcutHintsVisible,
+      shortcutHintSide,
     });
   };
 
@@ -749,6 +884,8 @@ export default function App() {
       showImageHistoryPanel,
       showBottomControls,
       isFullscreenImage,
+      shortcutHintsVisible,
+      shortcutHintSide,
     });
   };
 
@@ -765,6 +902,8 @@ export default function App() {
       showImageHistoryPanel,
       showBottomControls,
       isFullscreenImage,
+      shortcutHintsVisible,
+      shortcutHintSide,
     });
   };
 
@@ -918,6 +1057,8 @@ export default function App() {
       showImageHistoryPanel,
       showBottomControls,
       isFullscreenImage,
+      shortcutHintsVisible,
+      shortcutHintSide,
     });
   };
 
@@ -934,6 +1075,8 @@ export default function App() {
       showImageHistoryPanel,
       showBottomControls,
       isFullscreenImage,
+      shortcutHintsVisible,
+      shortcutHintSide,
     });
   };
 
@@ -950,6 +1093,8 @@ export default function App() {
       showImageHistoryPanel,
       showBottomControls,
       isFullscreenImage,
+      shortcutHintsVisible,
+      shortcutHintSide,
     });
   };
 
@@ -966,6 +1111,8 @@ export default function App() {
       showImageHistoryPanel: next,
       showBottomControls,
       isFullscreenImage,
+      shortcutHintsVisible,
+      shortcutHintSide,
     });
   };
 
@@ -982,6 +1129,8 @@ export default function App() {
       showImageHistoryPanel,
       showBottomControls: next,
       isFullscreenImage,
+      shortcutHintsVisible,
+      shortcutHintSide,
     });
   };
 
@@ -998,6 +1147,8 @@ export default function App() {
       showImageHistoryPanel,
       showBottomControls,
       isFullscreenImage: next,
+      shortcutHintsVisible,
+      shortcutHintSide,
     });
   };
 
@@ -1051,7 +1202,7 @@ export default function App() {
 
         <HoverRevealButton
           onClick={handleToggleFullscreen}
-          label="exit-fullscreen"
+          label={getShortcutLabel('exit-fullscreen', shortcutHintSide, shortcutHintsVisible)}
           baseOpacity={0}
           style={{
             ...uiHideToggleButtonStyle,
@@ -1096,12 +1247,12 @@ export default function App() {
       >
         <HoverRevealButton
           onClick={handleToggleFolderHistoryPanel}
-          label={showFolderHistoryPanel ? 'hide-folder-history' : 'show-folder-history'}
+          label={getShortcutLabel(showFolderHistoryPanel ? 'hide-folder-history' : 'show-folder-history', shortcutHintSide, shortcutHintsVisible)}
           style={uiHideToggleButtonStyle}
         />
         <HoverRevealButton
           onClick={handleToggleTopControls}
-          label={showTopControls ? 'hide-top-buttons' : 'show-top-buttons'}
+          label={getShortcutLabel(showTopControls ? 'hide-top-buttons' : 'show-top-buttons', shortcutHintSide, shortcutHintsVisible)}
           style={uiHideToggleButtonStyle}
         />
       </div>
@@ -1119,12 +1270,12 @@ export default function App() {
       >
         <HoverRevealButton
           onClick={handleToggleBottomControls}
-          label={showBottomControls ? 'hide-bottom-buttons' : 'show-bottom-buttons'}
+          label={getShortcutLabel(showBottomControls ? 'hide-bottom-buttons' : 'show-bottom-buttons', shortcutHintSide, shortcutHintsVisible)}
           style={uiHideToggleButtonStyle}
         />
         <HoverRevealButton
           onClick={handleToggleImageHistoryPanel}
-          label={showImageHistoryPanel ? 'hide-image-history' : 'show-image-history'}
+          label={getShortcutLabel(showImageHistoryPanel ? 'hide-image-history' : 'show-image-history', shortcutHintSide, shortcutHintsVisible)}
           style={uiHideToggleButtonStyle}
         />
       </div>
@@ -1228,6 +1379,8 @@ export default function App() {
               onReindexFolder={handleReindexFolder}
               onNextFolder={handleNextFolder}
               disabled={isIndexing}
+              shortcutHintsVisible={shortcutHintsVisible}
+              shortcutHintSide={shortcutHintSide}
             />
 
             <div
@@ -1242,9 +1395,9 @@ export default function App() {
                 background: '#1f2335',
               }}
             >
-              <ActionButton label="reset-random-history" onClick={handleResetRandomHistory} disabled={isIndexing} />
-              <ActionButton label="reset_normal_history" onClick={handleResetNormalHistory} disabled={isIndexing} />
-              <ActionButton label="full_wipe" onClick={handleFullWipe} disabled={isIndexing} />
+              <ActionButton label={getShortcutLabel('reset-random-history', shortcutHintSide, shortcutHintsVisible)} onClick={handleResetRandomHistory} disabled={isIndexing} />
+              <ActionButton label={getShortcutLabel('reset-normal-history', shortcutHintSide, shortcutHintsVisible)} onClick={handleResetNormalHistory} disabled={isIndexing} />
+              <ActionButton label={getShortcutLabel('full-wipe', shortcutHintSide, shortcutHintsVisible)} onClick={handleFullWipe} disabled={isIndexing} />
             </div>
           </div>
         )}
@@ -1279,7 +1432,7 @@ export default function App() {
 
           <HoverRevealButton
             onClick={handleToggleFullscreen}
-            label="fullscreen"
+            label={getShortcutLabel('fullscreen', shortcutHintSide, shortcutHintsVisible)}
             style={{
               ...uiHideToggleButtonStyle,
               position: 'absolute',
@@ -1309,6 +1462,8 @@ export default function App() {
             isRunning={isTimerRunning}
             timerFlowMode={timerFlowMode}
             disabled={isIndexing}
+            shortcutHintsVisible={shortcutHintsVisible}
+            shortcutHintSide={shortcutHintSide}
           />
         )}
       </div>

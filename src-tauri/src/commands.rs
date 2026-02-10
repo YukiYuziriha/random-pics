@@ -61,6 +61,10 @@ pub struct ImageState {
     pub show_bottom_controls: bool,
     #[serde(rename = "isFullscreenImage")]
     pub is_fullscreen_image: bool,
+    #[serde(rename = "shortcutHintsVisible")]
+    pub shortcut_hints_visible: bool,
+    #[serde(rename = "shortcutHintSide")]
+    pub shortcut_hint_side: String,
 }
 
 #[derive(Debug, Serialize)]

@@ -1,4 +1,5 @@
 import { ActionButton } from './ActionButton.tsx';
+import { getShortcutLabel, getShortcutKey } from '../shortcuts.ts';
 
 type ImageControlsProps = {
   onPrev: () => void | Promise<void>;
@@ -19,6 +20,8 @@ type ImageControlsProps = {
   isRunning: boolean;
   timerFlowMode: 'random' | 'normal';
   disabled?: boolean;
+  shortcutHintsVisible?: boolean;
+  shortcutHintSide?: 'left' | 'right';
 };
 
 export function ImageControls({
@@ -40,7 +43,11 @@ export function ImageControls({
   isRunning,
   timerFlowMode,
   disabled = false,
+  shortcutHintsVisible = false,
+  shortcutHintSide = 'left',
 }: ImageControlsProps) {
+  const startStopLabel = getShortcutLabel('start-stop', shortcutHintSide, shortcutHintsVisible).replace('start-stop', isRunning ? 'stop' : 'start');
+  const playPauseLabel = getShortcutLabel('play-pause', shortcutHintSide, shortcutHintsVisible).replace('play-pause', isRunning ? 'pause' : 'play');
   return (
     <div
       data-testid="image-buttons-row"
@@ -83,7 +90,6 @@ export function ImageControls({
             gap: '4px',
           }}
         >
-          <span>[</span>
           <button
             onClick={onToggleStartStop}
             disabled={disabled}
@@ -99,7 +105,7 @@ export function ImageControls({
               opacity: disabled ? 0.55 : 1,
             }}
           >
-            {isRunning ? 'stop' : 'start'}
+            {startStopLabel}
           </button>
           <span>-</span>
           <input
@@ -124,7 +130,6 @@ export function ImageControls({
               textAlign: 'right',
             }}
           />
-          <span>]</span>
         </div>
 
         <div
@@ -143,7 +148,6 @@ export function ImageControls({
             gap: '4px',
           }}
         >
-          <span>[</span>
           <button
             onClick={onTogglePausePlay}
             disabled={disabled}
@@ -159,7 +163,7 @@ export function ImageControls({
               opacity: disabled ? 0.55 : 1,
             }}
           >
-            {isRunning ? 'pause' : 'play'}
+            {playPauseLabel}
           </button>
           <span>-</span>
           <input
@@ -184,7 +188,6 @@ export function ImageControls({
               textAlign: 'right',
             }}
           />
-          <span>]</span>
         </div>
 
         <button
@@ -207,6 +210,7 @@ export function ImageControls({
             opacity: disabled ? 0.55 : 1,
           }}
         >
+          {shortcutHintsVisible && <span>[{getShortcutKey('toggle-flow-mode', shortcutHintSide)}]</span>}
           <span style={{ color: timerFlowMode === 'random' ? '#f7768e' : '#8f93aa' }}>random</span>
           <span style={{ color: '#8f93aa' }}>|</span>
           <span style={{ color: timerFlowMode === 'normal' ? '#7aa2f7' : '#8f93aa' }}>normal</span>
@@ -225,9 +229,9 @@ export function ImageControls({
           flexWrap: 'wrap',
         }}
       >
-        <ActionButton label="vertical-mirror" onClick={onToggleVerticalMirror} disabled={disabled} />
-        <ActionButton label="horizontal-mirror" onClick={onToggleHorizontalMirror} disabled={disabled} />
-        <ActionButton label="greyscale" onClick={onToggleGreyscale} disabled={disabled} />
+        <ActionButton label={getShortcutLabel('vertical-mirror', shortcutHintSide, shortcutHintsVisible)} onClick={onToggleVerticalMirror} disabled={disabled} />
+        <ActionButton label={getShortcutLabel('horizontal-mirror', shortcutHintSide, shortcutHintsVisible)} onClick={onToggleHorizontalMirror} disabled={disabled} />
+        <ActionButton label={getShortcutLabel('grayscale', shortcutHintSide, shortcutHintsVisible)} onClick={onToggleGreyscale} disabled={disabled} />
       </div>
 
       <div
@@ -242,11 +246,11 @@ export function ImageControls({
           flexWrap: 'wrap',
         }}
       >
-        <ActionButton label="prev" onClick={onPrev} disabled={disabled} />
-        <ActionButton label="next" onClick={onNext} disabled={disabled} />
-        <ActionButton label="prev-random" onClick={onPrevRandom} disabled={disabled} />
-        <ActionButton label="new-random" onClick={onForceRandom} disabled={disabled} />
-        <ActionButton label="next-random" onClick={onNextRandom} disabled={disabled} />
+        <ActionButton label={getShortcutLabel('prev-normal', shortcutHintSide, shortcutHintsVisible)} onClick={onPrev} disabled={disabled} />
+        <ActionButton label={getShortcutLabel('next-normal', shortcutHintSide, shortcutHintsVisible)} onClick={onNext} disabled={disabled} />
+        <ActionButton label={getShortcutLabel('prev-random', shortcutHintSide, shortcutHintsVisible)} onClick={onPrevRandom} disabled={disabled} />
+        <ActionButton label={getShortcutLabel('force-random', shortcutHintSide, shortcutHintsVisible)} onClick={onForceRandom} disabled={disabled} />
+        <ActionButton label={getShortcutLabel('next-random', shortcutHintSide, shortcutHintsVisible)} onClick={onNextRandom} disabled={disabled} />
       </div>
     </div>
   );
