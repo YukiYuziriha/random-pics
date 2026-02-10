@@ -44,6 +44,8 @@ export type ImageState = {
   showImageHistoryPanel: boolean;
   showBottomControls: boolean;
   isFullscreenImage: boolean;
+  shortcutHintsVisible: boolean;
+  shortcutHintSide: 'left' | 'right';
 };
 
 // Folder operations

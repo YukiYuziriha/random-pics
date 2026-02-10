@@ -1374,7 +1374,7 @@ impl ImageLoader {
         &self,
     ) -> Result<crate::commands::ImageState, Box<dyn std::error::Error>> {
         let row = self.db.conn().query_row(
-            "SELECT vertical_mirror, horizontal_mirror, greyscale, timer_flow_mode, show_folder_history_panel, show_top_controls, show_image_history_panel, show_bottom_controls, is_fullscreen_image FROM state WHERE id = 1",
+            "SELECT vertical_mirror, horizontal_mirror, greyscale, timer_flow_mode, show_folder_history_panel, show_top_controls, show_image_history_panel, show_bottom_controls, is_fullscreen_image, shortcut_hints_visible, shortcut_hint_side FROM state WHERE id = 1",
             [],
             |row| {
                 let vertical_mirror: i64 = row.get(0)?;
@@ -1386,7 +1386,9 @@ impl ImageLoader {
                 let show_image_history_panel: i64 = row.get(6)?;
                 let show_bottom_controls: i64 = row.get(7)?;
                 let is_fullscreen_image: i64 = row.get(8)?;
-                Ok((vertical_mirror, horizontal_mirror, greyscale, timer_flow_mode, show_folder_history_panel, show_top_controls, show_image_history_panel, show_bottom_controls, is_fullscreen_image))
+                let shortcut_hints_visible: i64 = row.get(9)?;
+                let shortcut_hint_side: String = row.get(10)?;
+                Ok((vertical_mirror, horizontal_mirror, greyscale, timer_flow_mode, show_folder_history_panel, show_top_controls, show_image_history_panel, show_bottom_controls, is_fullscreen_image, shortcut_hints_visible, shortcut_hint_side))
             },
         )?;
 
@@ -1404,6 +1406,8 @@ impl ImageLoader {
             show_image_history_panel: row.6 != 0,
             show_bottom_controls: row.7 != 0,
             is_fullscreen_image: row.8 != 0,
+            shortcut_hints_visible: row.9 != 0,
+            shortcut_hint_side: if row.10 == "right" { "right".to_string() } else { "left".to_string() },
         })
     }
 
@@ -1412,7 +1416,7 @@ impl ImageLoader {
         state: &crate::commands::ImageState,
     ) -> Result<(), Box<dyn std::error::Error>> {
         self.db.conn().execute(
-            "UPDATE state SET vertical_mirror = ?1, horizontal_mirror = ?2, greyscale = ?3, timer_flow_mode = ?4, show_folder_history_panel = ?5, show_top_controls = ?6, show_image_history_panel = ?7, show_bottom_controls = ?8, is_fullscreen_image = ?9 WHERE id = 1",
+            "UPDATE state SET vertical_mirror = ?1, horizontal_mirror = ?2, greyscale = ?3, timer_flow_mode = ?4, show_folder_history_panel = ?5, show_top_controls = ?6, show_image_history_panel = ?7, show_bottom_controls = ?8, is_fullscreen_image = ?9, shortcut_hints_visible = ?10, shortcut_hint_side = ?11 WHERE id = 1",
             params![
                 state.vertical_mirror as i64,
                 state.horizontal_mirror as i64,
@@ -1423,6 +1427,8 @@ impl ImageLoader {
                 state.show_image_history_panel as i64,
                 state.show_bottom_controls as i64,
                 state.is_fullscreen_image as i64,
+                state.shortcut_hints_visible as i64,
+                &state.shortcut_hint_side,
             ],
         )?;
         Ok(())

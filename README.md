@@ -1,9 +1,11 @@
 ## random-pics
 Ridiculously fast desktop local image viewer for gesture drawing and reference practice.
+If you touch-type, the UI shortcuts should feel natural on first use.
 
 ## what it does
 - opens large image folders quickly
 - lets you browse in order or shuffle randomly
+- **Ctrl** toggles shortcut hints, **Alt** switches left/right key side; button order updates to match keyboard rows
 - includes a timed slideshow mode for hands-free practice
 - remembers your last image and UI settings between launches
 - offers quick image aids: mirror and greyscale

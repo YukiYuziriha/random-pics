@@ -1,222 +1,192 @@
-# Plan: Folder History Delete + Per-Folder Hidden Image Blacklists
+# Dual-Hand Shortcut System Plan
 
-## Goal
+## First Priorities
 
-Implement UI and backend support for:
+- Normalize all button labels to kebab-case (`have-this-case`), never snake_case (`not_this_case`).
+- Do not show bracketed shortcut hints on `start/stop` and `play/pause` controls.
+- Persist shortcut hint visibility and shown side (`hide/view`, `left/right`) in DB across sessions.
 
-1. Deleting folders from **folder history only** (not filesystem).
-2. Hiding image rows from **normal** and **random** histories independently.
-3. Keeping hidden-image blacklists **per folder** and **per order mode** (2 blacklists per folder).
-4. Clearing blacklists **only on folder reindex** (not on reset random/normal history).
-5. Showing a centralized error toast when a folder has no visible images because all are hidden, with reindex suggestion.
+## Objective
 
----
+Implement a dual-hand shortcut system where:
 
-## Current Architecture (Touchpoints)
+- Every action has two always-active keys: one left-hand key and one right-hand key.
+- The shortcut hint UI is toggled with `Ctrl` (toggle mode, not hold).
+- The visible shortcut side (left vs right) is toggled with `Alt` (toggle mode, not hold).
+- Only one side is shown on buttons at a time, but both sides always work.
+- Shortcut data comes from a single source of truth with explicit `left` and `right` keys.
 
-- Frontend orchestration/state/toasts: `src/App.tsx`
-- Shared history UI component: `src/components/HistoryPanel.tsx`
-- Tauri invoke API wrappers/types: `src/apiClient.ts`
-- Command adapters + error sanitization: `src-tauri/src/commands.rs`
-- Tauri command registration: `src-tauri/src/lib.rs`
-- Persistence/traversal/indexing logic: `src-tauri/src/img_loader.rs`
-- DB schema + migrations: `src-tauri/src/db.rs`
+## Current Codebase Findings
 
----
+### Keyboard handling
 
-## Phase 1: Normalize Data Contracts
+- Keyboard events are handled in `src/App.tsx` via one global `keydown` listener.
+- Current key actions:
+  - `F11` toggles OS fullscreen.
+  - `f` toggles in-app fullscreen (`isFullscreenImage`).
+- No current shortcut mapping object exists; controls are button-driven.
 
-### 1.1 Folder history row identity
+### Control rendering
 
-- Ensure folder history payload includes `id` end-to-end.
-- Align types between:
-  - Rust `FolderHistoryItem` response model.
-  - TS `FolderHistoryItem` in `src/apiClient.ts`.
-  - Consumer code in `src/App.tsx` and `src/components/HistoryPanel.tsx`.
+- Action buttons are rendered with plain text labels via `src/components/ActionButton.tsx`.
+- Image controls and folder controls are composed in:
+  - `src/components/ImageControls.tsx`
+  - `src/components/FolderControls.tsx`
+- There is no existing shortcut hint layer or side-switching state.
 
-### 1.2 Image history row identity
+### Persistence and state patterns
 
-- Replace path-only image history response shape with row objects carrying stable identity needed for hide-by-order semantics.
-- Required fields should support:
-  - display label/path,
-  - click-to-jump behavior,
-  - hide action payload (folder + mode + order identity).
+- UI state persistence already exists for image/view settings in `src/App.tsx` through `setImageState`.
+- `localStorage` is already used for non-backend UI preferences (timer seconds, folder history mode).
+- Shortcut visibility/side will be persisted in DB (not localStorage), aligned with other persistent UI state.
 
-### 1.3 Command arg consistency
+## Single Source of Truth Design
 
-- Verify and align argument naming for `delete_folder` invoke payload (`folder_id` vs camelCase mapping) so delete calls work reliably.
+Create one centralized shortcut registry (frontend-only) that defines all actions and keys.
 
----
+### Registry shape
 
-## Phase 2: Folder History Delete (UI + Backend Wiring)
+Each shortcut entry should include:
 
-### 2.1 UI behavior
+- `actionId`: stable identifier used by keyboard dispatch and UI labels.
+- `label`: base label text used on controls.
+- `leftKey`: explicit left-hand key.
+- `rightKey`: explicit right-hand key.
+- `handler`: function reference already implemented in `App.tsx`.
+- `isDisabled`: derived from existing states (for example indexing lock).
 
-- In folder history rows, show delete icon/button on hover, **left side** of row.
-- Keep existing row click navigation behavior.
-- Ensure delete click does not trigger row navigation (event isolation).
+### Planned mappings (authoritative)
 
-### 2.2 Frontend action flow
+- vertical mirror: left `c`, right `,`
+- horizontal mirror: left `v`, right `m`
+- grayscale: left `b`, right `n`
+- next normal: left `f`, right `k`
+- prev normal: left `d`, right `j`
+- next random: left `g`, right `l`
+- prev random: left `s`, right `h`
+- start/stop: left `t`, right `y`
+- play/pause: left `r`, right `u`
+- force new random: left `w`, right `o`
+- toggle order (normal/random): left `q`, right `p`
+- next folder: left `5`, right `7`
+- prev folder: left `4`, right `6`
+- reindex folder: left `3`, right `8`
+- pick folder: left `2`, right `9`
+- show/hide shortcut hints: `Ctrl` (toggle state)
+- switch shown side: `Alt` (toggle `left`/`right`)
 
-- Add folder-row delete handler in `src/App.tsx`.
-- On delete success:
-  - remove folder from displayed history (refresh from backend),
-  - refresh current image/folder state if current folder was deleted.
-- On error:
-  - ignore filesystem-related failures per requirement (history removal is primary intent),
-  - route user-visible failures through centralized error handling.
+## State Model
+
+Add shortcut UI state in `App.tsx`:
+
+- `shortcutHintsVisible: boolean` (toggled by `Ctrl`)
+- `shortcutHintSide: 'left' | 'right'` (toggled by `Alt`)
 
-### 2.3 Backend semantics
+DB persistence (required):
 
-- Reuse `delete_folder_by_id` path to remove DB/history records only.
-- Do not add filesystem delete operations.
+- extend persisted image/UI state schema to include:
+  - `shortcutHintsVisible`
+  - `shortcutHintSide`
+- load both values from DB during app initialization via existing image state load flow.
+- write both values to DB whenever `Ctrl` or `Alt` toggles them.
+- default on first launch:
+  - `shortcutHintsVisible = false`
+  - `shortcutHintSide = 'left'`
 
----
+## Keyboard Event Logic Plan
 
-## Phase 3: Add Persistent Hidden-Image Blacklists
+Refactor keydown handling in `src/App.tsx` to route through the shortcut registry.
 
-### 3.1 Schema additions
+### Dispatch rules
 
-- Add migration-safe tables for hidden rows keyed by:
-  - `folder_id`,
-  - mode (`normal` or `random`) OR two dedicated tables,
-  - order identity for that mode.
-- Add indices/constraints to prevent duplicates.
-
-### 3.2 Lifecycle cleanup
-
-- Ensure hidden rows are deleted when:
-  - folder is deleted,
-  - full wipe runs.
-- Preserve hidden rows during random/normal history reset.
-
-### 3.3 Migration strategy
-
-- Extend `run_migrations` in `src-tauri/src/db.rs` without destructive reset.
-- Preserve existing user data.
-
----
-
-## Phase 4: Hide API Surface
-
-### 4.1 New commands
-
-- Add commands to hide image row for:
-  - normal history row,
-  - random history row.
-- Inputs must include folder + row identity (mode/order-aligned).
-
-### 4.2 Registration and client wrappers
-
-- Register commands in `src-tauri/src/lib.rs`.
-- Add typed wrappers in `src/apiClient.ts`.
-
----
-
-## Phase 5: History Read Filtering
-
-### 5.1 Normal history filtering
-
-- Exclude normal-blacklisted rows from `get_normal_history` response.
-- Return current pointer relative to visible list semantics.
-
-### 5.2 Random history filtering
-
-- Exclude random-blacklisted rows from `get_random_history` response.
-- Keep pointer/order handling stable with filtered view.
-
-### 5.3 UI compatibility
-
-- Update `src/App.tsx` + `src/components/HistoryPanel.tsx` to render new row shape and maintain current centered-window behavior.
-
----
-
-## Phase 6: Traversal Logic with Hidden Lists
-
-### 6.1 Normal traversal
-
-- Ensure these skip normal-hidden rows:
-  - current/next/prev,
-  - set-by-index.
-
-### 6.2 Random traversal
-
-- Ensure these skip random-hidden rows:
-  - force random,
-  - next/prev random,
-  - set-random-by-index.
-
-### 6.3 Mode isolation
-
-- Hidden in normal must not hide in random.
-- Hidden in random must not hide in normal.
-
----
-
-## Phase 7: Reindex/Reset Semantics
-
-### 7.1 Reindex behavior
-
-- On current-folder reindex, clear both blacklists for that folder.
-
-### 7.2 Reset behavior
-
-- `reset_normal_history`: must not clear any blacklist.
-- `reset_random_history`: must not clear any blacklist.
-
-### 7.3 Folder-scope guarantee
-
-- Enforce blacklist scoping by folder id so each folder owns two independent blacklists.
-
----
-
-## Phase 8: Image History Hide UI
-
-### 8.1 UI affordance
-
-- In image history rows (both normal/random), show hide button on hover, **right side** of row.
-
-### 8.2 Interaction
-
-- Clicking hide removes image from currently shown history list.
-- Keep row click/jump intact; hide click should not trigger jump.
-
-### 8.3 State refresh
-
-- After hide action, reload active history and pointer from backend for consistency.
-
----
-
-## Phase 9: Centralized Error Handling Extension
-
-### 9.1 Backend error normalization
-
-- Add explicit sanitized message mapping for hidden exhaustion case:
-  - all images in folder hidden,
-  - include suggestion to reindex.
-
-### 9.2 Frontend centralization
-
-- Route all relevant backend calls through shared error path (`runOp`/`handleBackendError`) including currently direct-call paths where practical.
-- Ensure hidden-exhaustion always shows toast via one flow.
-
----
-
-## Phase 10: Documentation Updates
-
-- Update docs under `docs/` to capture:
-  - per-folder/per-mode blacklist behavior,
-  - reset vs reindex semantics,
-  - user-facing hidden-all error behavior.
-
----
-
-## Acceptance Checklist
-
-- Folder row delete appears on hover (left), deletes history entry only.
-- Image row hide appears on hover (right) in both history modes.
-- Each folder has exactly two independent hidden sets (normal/random).
-- Hidden sets survive random/normal history reset.
-- Hidden sets clear on reindex of that folder.
-- If all images become hidden for active mode in a folder, user gets centralized toast with reindex suggestion.
-- No filesystem delete operation is introduced for folder-history delete.
+- Normalize key input once per event.
+- First handle toggle keys:
+  - `Ctrl` flips visibility state.
+  - `Alt` flips visible side.
+- Then handle action keys:
+  - Match against both `leftKey` and `rightKey` for every action.
+  - Execute mapped handler regardless of currently shown side.
+- Maintain existing `isIndexing` and folder availability protections by reusing existing handlers.
+
+### Existing fullscreen key conflict
+
+- `f` is currently used for fullscreen toggle, but requested mapping assigns `f` to next normal image.
+- Plan: remove `f` as fullscreen key and keep fullscreen only on `F11` and the fullscreen button.
+
+### Repeat-key behavior
+
+- Prevent repeated toggles from key auto-repeat on `Ctrl`/`Alt` by ignoring repeat events for these toggle keys.
+- Keep repeat behavior for navigation/action keys unchanged unless explicitly changed later.
+
+## UI Rendering Plan
+
+### Button label formatting
+
+- When hints are hidden: show existing labels unchanged.
+- When hints are visible:
+  - show current side key only, prefixed in brackets.
+  - format: `[c]vertical-mirror` for left side example.
+  - when side switched: `[,]vertical-mirror` for right side example.
+- Exception:
+  - `start/stop` and `play/pause` controls show no `[]` key prefix even when hints are visible.
+
+### Where hints appear
+
+- Apply hint labels to all mapped actions in:
+  - `FolderControls` buttons
+  - `ImageControls` action buttons
+  - timer start/stop and play/pause controls
+  - flow mode toggle button (order toggle)
+- Keep non-mapped utility buttons unchanged.
+
+### Left/right table stability requirement
+
+- Preserve button order as currently rendered.
+- Treat first key in registry as left and second as right only (no inference).
+
+## File-Level Implementation Plan
+
+- `src/App.tsx`
+  - introduce shortcut registry and centralized key dispatcher.
+  - add toggle UI state for hints visibility and shown side.
+  - pass computed shortcut labels/keys to child controls.
+  - resolve `f` key conflict by removing fullscreen binding from `f`.
+- `src/apiClient.ts`
+  - extend `ImageState` type with shortcut hint visibility and side fields.
+- `src-tauri/src/db.rs` and related persistence layer
+  - add schema migration for new persisted shortcut UI fields.
+  - ensure existing DB data is preserved during migration.
+- `src-tauri/src/img_loader.rs` and command wiring
+  - include new shortcut UI fields in get/set image state read/write paths.
+- `src/components/ActionButton.tsx`
+  - support displaying a computed shortcut prefix in label rendering.
+- `src/components/FolderControls.tsx`
+  - accept shortcut metadata/labels per button and render accordingly.
+- `src/components/ImageControls.tsx`
+  - accept shortcut metadata/labels for all mapped controls and render accordingly.
+- `README.md` and/or `docs/*`
+  - update shortcut behavior documentation to reflect dual-hand always-active model and Ctrl/Alt toggles.
+
+## Validation Plan
+
+### Functional checks
+
+- Every mapped action responds to both left and right keys.
+- Ctrl toggles hint visibility state each press.
+- Alt toggles shown side each press.
+- Hint text updates correctly to selected side while both key sets remain active.
+- Start/stop, play/pause, order toggle, and folder actions respond via both mappings.
+- No regression in indexing lock behavior and folder-required actions.
+- Fullscreen still works via `F11` and UI button.
+
+### Build/type checks
+
+- Run `bun tsc` after implementation changes.
+
+## Open Logic Question
+
+Should shortcut actions still fire when keyboard focus is inside the timer numeric inputs?
+
+- Current behavior blocks key shortcuts while typing in inputs.
+- If this remains, "always active" will apply globally except active text inputs.
+- If changed, shortcuts will trigger even during input editing.
