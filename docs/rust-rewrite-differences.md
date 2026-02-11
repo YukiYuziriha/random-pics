@@ -16,6 +16,7 @@ It is focused on real logic/UI differences, not just file moves.
 5. Rust parity fixes applied for data semantics:
    - FK-safe delete order in `full_wipe` transaction.
    - `lap_has` no-row handling via optional query result.
+6. Image path uniqueness is now folder-scoped (`folder_id + path`) to allow overlapping parent/subfolder history entries.
 
 ## UI/Interaction Differences
 

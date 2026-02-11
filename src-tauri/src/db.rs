@@ -59,10 +59,19 @@ impl Db {
         self.execute(
             "CREATE TABLE IF NOT EXISTS images (
                 id INTEGER PRIMARY KEY,
-                path TEXT NOT NULL UNIQUE,
+                path TEXT NOT NULL,
                 folder_id INTEGER,
                 FOREIGN KEY (folder_id) REFERENCES folders(id)
             )",
+            rusqlite::params![],
+        )?;
+
+        self.execute(
+            "CREATE UNIQUE INDEX IF NOT EXISTS idx_images_folder_path ON images(folder_id, path)",
+            rusqlite::params![],
+        )?;
+        self.execute(
+            "CREATE INDEX IF NOT EXISTS idx_images_folder_id ON images(folder_id)",
             rusqlite::params![],
         )?;
 
@@ -122,6 +131,7 @@ impl Db {
     }
 
     fn run_migrations(&self) -> Result<()> {
+        self.migrate_images_to_folder_scoped_paths()?;
         self.ensure_state_column("timer_flow_mode", "TEXT NOT NULL DEFAULT 'random'")?;
         self.ensure_state_column("show_folder_history_panel", "INTEGER NOT NULL DEFAULT 1")?;
         self.ensure_state_column("show_top_controls", "INTEGER NOT NULL DEFAULT 1")?;
@@ -132,6 +142,60 @@ impl Db {
         self.ensure_state_column("shortcut_hints_visible", "INTEGER NOT NULL DEFAULT 0")?;
         self.ensure_state_column("shortcut_hint_side", "TEXT NOT NULL DEFAULT 'left'")?;
         self.ensure_hidden_tables_and_indexes()?;
+        Ok(())
+    }
+
+    fn migrate_images_to_folder_scoped_paths(&self) -> Result<()> {
+        let needs_migration: i64 = self.query_row(
+            "SELECT COUNT(*) FROM pragma_index_list('images') WHERE origin = 'u'",
+            rusqlite::params![],
+            |row| row.get(0),
+        )?;
+
+        if needs_migration == 0 {
+            self.execute(
+                "CREATE UNIQUE INDEX IF NOT EXISTS idx_images_folder_path ON images(folder_id, path)",
+                rusqlite::params![],
+            )?;
+            self.execute(
+                "CREATE INDEX IF NOT EXISTS idx_images_folder_id ON images(folder_id)",
+                rusqlite::params![],
+            )?;
+            return Ok(());
+        }
+
+        let mut conn = self.conn();
+        conn.execute("PRAGMA foreign_keys = OFF", rusqlite::params![])?;
+        let tx = conn.transaction()?;
+        tx.execute(
+            "ALTER TABLE images RENAME TO images_old",
+            rusqlite::params![],
+        )?;
+        tx.execute(
+            "CREATE TABLE images (
+                id INTEGER PRIMARY KEY,
+                path TEXT NOT NULL,
+                folder_id INTEGER,
+                FOREIGN KEY (folder_id) REFERENCES folders(id)
+            )",
+            rusqlite::params![],
+        )?;
+        tx.execute(
+            "INSERT INTO images (id, path, folder_id)
+             SELECT id, path, folder_id FROM images_old",
+            rusqlite::params![],
+        )?;
+        tx.execute(
+            "CREATE UNIQUE INDEX idx_images_folder_path ON images(folder_id, path)",
+            rusqlite::params![],
+        )?;
+        tx.execute(
+            "CREATE INDEX idx_images_folder_id ON images(folder_id)",
+            rusqlite::params![],
+        )?;
+        tx.execute("DROP TABLE images_old", rusqlite::params![])?;
+        tx.commit()?;
+        conn.execute("PRAGMA foreign_keys = ON", rusqlite::params![])?;
         Ok(())
     }
 
