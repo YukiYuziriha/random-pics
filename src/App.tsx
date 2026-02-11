@@ -1023,9 +1023,12 @@ export default function App() {
   };
 
   const resetTimerAfterManualNavigation = () => {
-    if (!isTimerRunning) return;
-    const restartAt = sanitizeSeconds(timerLoopStartSecondsRef.current);
-    void startTimerLoop(restartAt, false);
+    const resetTo = sanitizeSeconds(timerLoopStartSecondsRef.current);
+    if (isTimerRunning) {
+      void startTimerLoop(resetTo, false);
+    } else {
+      setRemainingTimerSeconds(resetTo);
+    }
   };
 
   const loadTimerFlowImage = async (): Promise<boolean> => {
