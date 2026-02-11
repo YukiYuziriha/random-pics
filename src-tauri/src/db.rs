@@ -59,10 +59,19 @@ impl Db {
         self.execute(
             "CREATE TABLE IF NOT EXISTS images (
                 id INTEGER PRIMARY KEY,
-                path TEXT NOT NULL UNIQUE,
+                path TEXT NOT NULL,
                 folder_id INTEGER,
                 FOREIGN KEY (folder_id) REFERENCES folders(id)
             )",
+            rusqlite::params![],
+        )?;
+
+        self.execute(
+            "CREATE UNIQUE INDEX IF NOT EXISTS idx_images_folder_path ON images(folder_id, path)",
+            rusqlite::params![],
+        )?;
+        self.execute(
+            "CREATE INDEX IF NOT EXISTS idx_images_folder_id ON images(folder_id)",
             rusqlite::params![],
         )?;
 
@@ -122,6 +131,8 @@ impl Db {
     }
 
     fn run_migrations(&self) -> Result<()> {
+        self.migrate_images_to_folder_scoped_paths()?;
+        self.repair_images_old_foreign_keys()?;
         self.ensure_state_column("timer_flow_mode", "TEXT NOT NULL DEFAULT 'random'")?;
         self.ensure_state_column("show_folder_history_panel", "INTEGER NOT NULL DEFAULT 1")?;
         self.ensure_state_column("show_top_controls", "INTEGER NOT NULL DEFAULT 1")?;
@@ -132,6 +143,191 @@ impl Db {
         self.ensure_state_column("shortcut_hints_visible", "INTEGER NOT NULL DEFAULT 0")?;
         self.ensure_state_column("shortcut_hint_side", "TEXT NOT NULL DEFAULT 'left'")?;
         self.ensure_hidden_tables_and_indexes()?;
+        Ok(())
+    }
+
+    fn migrate_images_to_folder_scoped_paths(&self) -> Result<()> {
+        let has_global_path_unique: i64 = self.query_row(
+            "SELECT COUNT(*) FROM pragma_index_list('images') WHERE origin = 'u'",
+            rusqlite::params![],
+            |row| row.get(0),
+        )?;
+
+        if has_global_path_unique == 0 {
+            self.execute(
+                "CREATE UNIQUE INDEX IF NOT EXISTS idx_images_folder_path ON images(folder_id, path)",
+                rusqlite::params![],
+            )?;
+            self.execute(
+                "CREATE INDEX IF NOT EXISTS idx_images_folder_id ON images(folder_id)",
+                rusqlite::params![],
+            )?;
+            return Ok(());
+        }
+
+        let mut conn = self.conn();
+        conn.execute("PRAGMA foreign_keys = OFF", rusqlite::params![])?;
+        let tx = conn.transaction()?;
+        tx.execute(
+            "DROP INDEX IF EXISTS idx_images_folder_path",
+            rusqlite::params![],
+        )?;
+        tx.execute(
+            "DROP INDEX IF EXISTS idx_images_folder_id",
+            rusqlite::params![],
+        )?;
+        tx.execute(
+            "CREATE TABLE images_new (
+                id INTEGER PRIMARY KEY,
+                path TEXT NOT NULL,
+                folder_id INTEGER,
+                FOREIGN KEY (folder_id) REFERENCES folders(id)
+            )",
+            rusqlite::params![],
+        )?;
+        tx.execute(
+            "INSERT INTO images_new (id, path, folder_id)
+             SELECT id, path, folder_id FROM images",
+            rusqlite::params![],
+        )?;
+        tx.execute("DROP TABLE images", rusqlite::params![])?;
+        tx.execute(
+            "ALTER TABLE images_new RENAME TO images",
+            rusqlite::params![],
+        )?;
+        tx.execute(
+            "CREATE UNIQUE INDEX idx_images_folder_path ON images(folder_id, path)",
+            rusqlite::params![],
+        )?;
+        tx.execute(
+            "CREATE INDEX idx_images_folder_id ON images(folder_id)",
+            rusqlite::params![],
+        )?;
+        tx.commit()?;
+        conn.execute("PRAGMA foreign_keys = ON", rusqlite::params![])?;
+        Ok(())
+    }
+
+    fn table_references_images_old(&self, table_name: &str) -> Result<bool> {
+        let count: i64 = self.query_row(
+            "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = ?1 AND sql LIKE '%REFERENCES images_old%';",
+            rusqlite::params![table_name],
+            |row| row.get(0),
+        )?;
+        Ok(count > 0)
+    }
+
+    fn repair_images_old_foreign_keys(&self) -> Result<()> {
+        let targets = [
+            "random_history",
+            "current_lap",
+            "hidden_normal_images",
+            "hidden_random_images",
+        ];
+
+        let mut needs_repair = false;
+        for table in targets {
+            if self.table_references_images_old(table)? {
+                needs_repair = true;
+                break;
+            }
+        }
+
+        if !needs_repair {
+            return Ok(());
+        }
+
+        let mut conn = self.conn();
+        conn.execute("PRAGMA foreign_keys = OFF", rusqlite::params![])?;
+        let tx = conn.transaction()?;
+
+        tx.execute(
+            "ALTER TABLE random_history RENAME TO random_history_old",
+            rusqlite::params![],
+        )?;
+        tx.execute(
+            "CREATE TABLE random_history (
+                folder_id INTEGER NOT NULL,
+                order_index INTEGER NOT NULL,
+                image_id INTEGER NOT NULL,
+                PRIMARY KEY (folder_id, order_index),
+                FOREIGN KEY (folder_id) REFERENCES folders(id),
+                FOREIGN KEY (image_id) REFERENCES images(id)
+            )",
+            rusqlite::params![],
+        )?;
+        tx.execute(
+            "INSERT INTO random_history (folder_id, order_index, image_id)
+             SELECT folder_id, order_index, image_id FROM random_history_old",
+            rusqlite::params![],
+        )?;
+        tx.execute("DROP TABLE random_history_old", rusqlite::params![])?;
+
+        tx.execute(
+            "ALTER TABLE current_lap RENAME TO current_lap_old",
+            rusqlite::params![],
+        )?;
+        tx.execute(
+            "CREATE TABLE current_lap (
+                folder_id INTEGER NOT NULL,
+                image_id INTEGER NOT NULL,
+                PRIMARY KEY (folder_id, image_id),
+                FOREIGN KEY (folder_id) REFERENCES folders(id),
+                FOREIGN KEY (image_id) REFERENCES images(id)
+            )",
+            rusqlite::params![],
+        )?;
+        tx.execute(
+            "INSERT INTO current_lap (folder_id, image_id)
+             SELECT folder_id, image_id FROM current_lap_old",
+            rusqlite::params![],
+        )?;
+        tx.execute("DROP TABLE current_lap_old", rusqlite::params![])?;
+
+        tx.execute(
+            "ALTER TABLE hidden_normal_images RENAME TO hidden_normal_images_old",
+            rusqlite::params![],
+        )?;
+        tx.execute(
+            "CREATE TABLE hidden_normal_images (
+                folder_id INTEGER NOT NULL,
+                image_id INTEGER NOT NULL,
+                PRIMARY KEY (folder_id, image_id),
+                FOREIGN KEY (folder_id) REFERENCES folders(id),
+                FOREIGN KEY (image_id) REFERENCES images(id)
+            )",
+            rusqlite::params![],
+        )?;
+        tx.execute(
+            "INSERT INTO hidden_normal_images (folder_id, image_id)
+             SELECT folder_id, image_id FROM hidden_normal_images_old",
+            rusqlite::params![],
+        )?;
+        tx.execute("DROP TABLE hidden_normal_images_old", rusqlite::params![])?;
+
+        tx.execute(
+            "ALTER TABLE hidden_random_images RENAME TO hidden_random_images_old",
+            rusqlite::params![],
+        )?;
+        tx.execute(
+            "CREATE TABLE hidden_random_images (
+                folder_id INTEGER NOT NULL,
+                image_id INTEGER NOT NULL,
+                PRIMARY KEY (folder_id, image_id),
+                FOREIGN KEY (folder_id) REFERENCES folders(id),
+                FOREIGN KEY (image_id) REFERENCES images(id)
+            )",
+            rusqlite::params![],
+        )?;
+        tx.execute(
+            "INSERT INTO hidden_random_images (folder_id, image_id)
+             SELECT folder_id, image_id FROM hidden_random_images_old",
+            rusqlite::params![],
+        )?;
+        tx.execute("DROP TABLE hidden_random_images_old", rusqlite::params![])?;
+
+        tx.commit()?;
+        conn.execute("PRAGMA foreign_keys = ON", rusqlite::params![])?;
         Ok(())
     }
 
