@@ -168,6 +168,14 @@ impl Db {
         conn.execute("PRAGMA foreign_keys = OFF", rusqlite::params![])?;
         let tx = conn.transaction()?;
         tx.execute(
+            "DROP INDEX IF EXISTS idx_images_folder_path",
+            rusqlite::params![],
+        )?;
+        tx.execute(
+            "DROP INDEX IF EXISTS idx_images_folder_id",
+            rusqlite::params![],
+        )?;
+        tx.execute(
             "ALTER TABLE images RENAME TO images_old",
             rusqlite::params![],
         )?;
