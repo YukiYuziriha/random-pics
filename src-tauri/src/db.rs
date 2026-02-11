@@ -210,7 +210,7 @@ impl Db {
 
     fn table_references_images_old(&self, table_name: &str) -> Result<bool> {
         let count: i64 = self.query_row(
-            "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = ?1 AND sql LIKE '%REFERENCES images_old%';",
+            "SELECT COUNT(*) FROM pragma_foreign_key_list(?1) WHERE \"table\" = 'images_old'",
             rusqlite::params![table_name],
             |row| row.get(0),
         )?;
