@@ -1249,7 +1249,9 @@ export default function App() {
     }
 
     const startAt = sanitizeSeconds(initialTimerSeconds);
-    await ensureTimerAudioContext();
+    if (isTimerSoundEnabled) {
+      await ensureTimerAudioContext();
+    }
     await startTimerLoop(startAt, true);
   };
 
@@ -1263,7 +1265,9 @@ export default function App() {
 
     const restartAt = sanitizeSeconds(remainingTimerSeconds);
     void (async () => {
-      await ensureTimerAudioContext();
+      if (isTimerSoundEnabled) {
+        await ensureTimerAudioContext();
+      }
       await startTimerLoop(restartAt, false);
     })();
   };
