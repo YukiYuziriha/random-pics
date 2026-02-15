@@ -33,6 +33,7 @@ This prevents empty hint artifacts such as `[]reset-random-history`.
 - `Control` toggles shortcut hint visibility.
 - `Alt` toggles which side is displayed (`left` or `right`).
 - Both left and right keys remain active for key handling, independent of visible side.
+- The app restores image order on startup from persisted timer flow mode (`random` or `normal`) and loads the current image from that order.
 - Function keys are handled directly for panel toggles (`F2/F6`, `F3/F7`, `F4/F8`, `F5/F9`).
 - Action key presses are resolved through `findActionByKey` against `SHORTCUT_REGISTRY`.
 - Holding `z` (left layout) or `/` (right layout) enters timer value capture mode.
@@ -109,3 +110,11 @@ Folder buttons are also side-dependent and follow numeric key geometry.
 - `[5]next-folder`
 
 Reset/wipe buttons remain in their original order and are not part of side-dependent reordering.
+
+The same row also includes a `mute` / `unmute` timer-sound toggle (no shortcut binding). The sound state is persisted via local storage and defaults to enabled.
+
+Timer beeps are synthesized in the UI with `AudioContext` (no WAV path dependency at playback time):
+
+- low beep at `remaining % 60 === 0` (excluding `0`)
+- mid beep at `remaining === 30`
+- high beep at `remaining` in `5..1`

@@ -256,6 +256,19 @@ pub async fn get_current_image(
 }
 
 #[tauri::command]
+pub async fn get_current_random_image(
+    state: State<'_, ImageLoaderState>,
+) -> Result<ImageResponse, CommandError> {
+    let loader = get_loader(&state)?;
+    let (data, auto_switched) = loader.get_current_random_image_or_last().await.map_err(CommandError::from)?;
+    let folder = loader.get_current_folder_id_and_path()
+        .ok()
+        .flatten()
+        .map(|(id, path)| FolderInfo { id, path });
+    Ok(ImageResponse { data, folder, auto_switched_folder: auto_switched })
+}
+
+#[tauri::command]
 pub async fn get_next_image(state: State<'_, ImageLoaderState>) -> Result<ImageResponse, CommandError> {
     let loader = get_loader(&state)?;
     let (data, auto_switched) = loader.get_next_image().await.map_err(CommandError::from)?;

@@ -57,6 +57,7 @@ pub fn run() {
                 commands::get_folder_history,
                 commands::reindex_current_folder,
                 commands::get_current_image,
+                commands::get_current_random_image,
                 commands::get_next_image,
                 commands::get_prev_image,
                 commands::get_next_random_image,

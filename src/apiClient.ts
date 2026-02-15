@@ -80,6 +80,10 @@ export async function getCurrentImage(): Promise<ImageResponse> {
   return await invoke<ImageResponse>('get_current_image');
 }
 
+export async function getCurrentRandomImage(): Promise<ImageResponse> {
+  return await invoke<ImageResponse>('get_current_random_image');
+}
+
 export async function getNextImage(): Promise<ImageResponse> {
   return await invoke<ImageResponse>('get_next_image');
 }
