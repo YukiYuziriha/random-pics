@@ -10,6 +10,7 @@ import {
   getFolderHistory,
   reindexCurrentFolder,
   getCurrentImage,
+  getCurrentRandomImage,
   getNextImage,
   getPrevImage,
   getNextRandomImage,
@@ -45,6 +46,7 @@ import { getShortcutLabel, findActionByKey, SHORTCUT_REGISTRY } from './shortcut
 
 const INITIAL_TIMER_STORAGE_KEY = 'timer.initial_seconds';
 const REMAINING_TIMER_STORAGE_KEY = 'timer.remaining_seconds';
+const TIMER_SOUND_ENABLED_STORAGE_KEY = 'timer.sound_enabled';
 const FOLDER_HISTORY_MODE_KEY = 'folder.history_mode';
 
 type TimerFlowMode = 'random' | 'normal';
@@ -133,6 +135,15 @@ function readPersistedSeconds(key: string, fallback: number): number {
   return Math.max(1, Math.floor(parsed));
 }
 
+function readPersistedBoolean(key: string, fallback: boolean): boolean {
+  const raw = globalThis.localStorage?.getItem(key);
+  if (!raw) return fallback;
+
+  if (raw === 'true') return true;
+  if (raw === 'false') return false;
+  return fallback;
+}
+
 export default function App() {
   const [imageSrc, setImageSrc] = useState('');
   const [history, setHistory] = useState<ImageHistoryItem[]>([]);
@@ -144,6 +155,7 @@ export default function App() {
   const [greyscale, setGreyscale] = useState(false);
   const [initialTimerSeconds, setInitialTimerSeconds] = useState(() => readPersistedSeconds(INITIAL_TIMER_STORAGE_KEY, 10));
   const [remainingTimerSeconds, setRemainingTimerSeconds] = useState(() => readPersistedSeconds(REMAINING_TIMER_STORAGE_KEY, 10));
+  const [isTimerSoundEnabled, setIsTimerSoundEnabled] = useState(() => readPersistedBoolean(TIMER_SOUND_ENABLED_STORAGE_KEY, true));
   const [isTimerRunning, setIsTimerRunning] = useState(false);
   const [timerFlowMode, setTimerFlowMode] = useState<TimerFlowMode>('random');
   const [activeHistoryMode, setActiveHistoryMode] = useState<'normal' | 'random'>('normal');
@@ -163,6 +175,7 @@ export default function App() {
   const indexingLogContainerRef = useRef<HTMLDivElement | null>(null);
   const stopTimerRef = useRef<null | (() => void)>(null);
   const timerLoopActiveRef = useRef(false);
+  const timerLastAnnouncedSecondRef = useRef<number | null>(null);
   const timerLoopStartSecondsRef = useRef(10);
   const timerCycleIdRef = useRef(0);
   const timerFlowModeRef = useRef<TimerFlowMode>('random');
@@ -171,6 +184,8 @@ export default function App() {
   const timerHoldCaptureActiveRef = useRef(false);
   const timerHoldCaptureKeyRef = useRef<'z' | '/' | null>(null);
   const timerHoldCaptureBufferRef = useRef('');
+  const timerAudioContextRef = useRef<AudioContext | null>(null);
+  const timerAudioErrorShownRef = useRef(false);
 
   const loadHistory = async (history: ImageHistory, mode: 'normal' | 'random') => {
     setHistory(history.history);
@@ -214,6 +229,72 @@ export default function App() {
     if (!(target instanceof Element)) return false;
     const tag = target.tagName.toLowerCase();
     return tag === 'input' || tag === 'textarea' || target.hasAttribute('contenteditable');
+  };
+
+  const ensureTimerAudioContext = async (): Promise<AudioContext | null> => {
+    if (!globalThis.AudioContext) {
+      if (!timerAudioErrorShownRef.current) {
+        timerAudioErrorShownRef.current = true;
+        showToast('AudioContext unavailable in this environment');
+      }
+      return null;
+    }
+
+    if (!timerAudioContextRef.current) {
+      timerAudioContextRef.current = new globalThis.AudioContext();
+    }
+
+    const ctx = timerAudioContextRef.current;
+    if (ctx.state === 'suspended') {
+      try {
+        await ctx.resume();
+      } catch (err) {
+        if (!timerAudioErrorShownRef.current) {
+          timerAudioErrorShownRef.current = true;
+          showToast(`Audio resume failed: ${formatError(err)}`);
+        }
+        return null;
+      }
+    }
+
+    return ctx;
+  };
+
+  const playTimerTone = async (tone: 'low' | 'mid' | 'high') => {
+    const ctx = await ensureTimerAudioContext();
+    if (!ctx) return;
+
+    const now = ctx.currentTime;
+    const settings = tone === 'low'
+      ? { freq: 440, duration: 0.16, gain: 0.09 }
+      : tone === 'mid'
+        ? { freq: 660, duration: 0.14, gain: 0.0825 }
+        : { freq: 880, duration: 0.12, gain: 0.075 };
+
+    const gainNode = ctx.createGain();
+    gainNode.gain.setValueAtTime(0.0001, now);
+    gainNode.gain.exponentialRampToValueAtTime(settings.gain, now + 0.006);
+    gainNode.gain.exponentialRampToValueAtTime(0.0001, now + settings.duration);
+    gainNode.connect(ctx.destination);
+
+    const oscSquare = ctx.createOscillator();
+    oscSquare.type = 'square';
+    oscSquare.frequency.setValueAtTime(settings.freq, now);
+    oscSquare.frequency.linearRampToValueAtTime(settings.freq * 0.98, now + settings.duration);
+    oscSquare.connect(gainNode);
+
+    const oscSine = ctx.createOscillator();
+    oscSine.type = 'sine';
+    oscSine.frequency.setValueAtTime(settings.freq * 2, now);
+    const sineGain = ctx.createGain();
+    sineGain.gain.setValueAtTime(0.18, now);
+    oscSine.connect(sineGain);
+    sineGain.connect(gainNode);
+
+    oscSquare.start(now);
+    oscSine.start(now);
+    oscSquare.stop(now + settings.duration + 0.03);
+    oscSine.stop(now + settings.duration + 0.03);
   };
 
   const commitTimerHoldCapture = () => {
@@ -290,7 +371,7 @@ export default function App() {
     await loadHistory(normalHistory, 'normal');
   };
 
-  const loadImageState = async () => {
+  const loadImageState = async (): Promise<ImageState> => {
     const data = await getImageState();
     setVerticalMirror(data.verticalMirror);
     setHorizontalMirror(data.horizontalMirror);
@@ -305,6 +386,7 @@ export default function App() {
     setShortcutHintSide(data.shortcutHintSide);
     shortcutHintsVisibleRef.current = data.shortcutHintsVisible;
     shortcutHintSideRef.current = data.shortcutHintSide;
+    return data;
   };
 
   const persistImageState = async (state: PersistedUiState) => {
@@ -373,10 +455,12 @@ export default function App() {
   useEffect(() => {
     const initialize = async () => {
       const folderData = await loadFolderHistory();
-      await loadImageState();
+      const persistedUiState = await loadImageState();
 
       if (folderData.currentIndex >= 0) {
-        const imageData = await getCurrentImage();
+        const imageData = persistedUiState.timerFlowMode === 'random'
+          ? await getCurrentRandomImage()
+          : await getCurrentImage();
         await handleLoadImage(imageData);
         const currentFolder = await getCurrentFolder();
         if (currentFolder) {
@@ -404,6 +488,44 @@ export default function App() {
   useEffect(() => {
     globalThis.localStorage?.setItem(REMAINING_TIMER_STORAGE_KEY, String(remainingTimerSeconds));
   }, [remainingTimerSeconds]);
+
+  useEffect(() => {
+    globalThis.localStorage?.setItem(TIMER_SOUND_ENABLED_STORAGE_KEY, String(isTimerSoundEnabled));
+  }, [isTimerSoundEnabled]);
+
+  useEffect(() => {
+    return () => {
+      const ctx = timerAudioContextRef.current;
+      if (!ctx) return;
+      void ctx.close();
+      timerAudioContextRef.current = null;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!isTimerRunning) {
+      timerLastAnnouncedSecondRef.current = null;
+      return;
+    }
+
+    const timeLeft = remainingTimerSeconds;
+    if (timeLeft <= 0) return;
+    if (timerLastAnnouncedSecondRef.current === timeLeft) return;
+    timerLastAnnouncedSecondRef.current = timeLeft;
+    if (!isTimerSoundEnabled) return;
+
+    let tone: 'low' | 'mid' | 'high' | null = null;
+    if (timeLeft % 60 === 0) {
+      tone = 'low';
+    } else if (timeLeft === 30) {
+      tone = 'mid';
+    } else if (timeLeft >= 1 && timeLeft <= 5) {
+      tone = 'high';
+    }
+
+    if (!tone) return;
+    void playTimerTone(tone);
+  }, [isTimerRunning, isTimerSoundEnabled, remainingTimerSeconds]);
 
   useEffect(() => {
     timerFlowModeRef.current = timerFlowMode;
@@ -1127,6 +1249,9 @@ export default function App() {
     }
 
     const startAt = sanitizeSeconds(initialTimerSeconds);
+    if (isTimerSoundEnabled) {
+      await ensureTimerAudioContext();
+    }
     await startTimerLoop(startAt, true);
   };
 
@@ -1139,7 +1264,22 @@ export default function App() {
     }
 
     const restartAt = sanitizeSeconds(remainingTimerSeconds);
-    void startTimerLoop(restartAt, false);
+    void (async () => {
+      if (isTimerSoundEnabled) {
+        await ensureTimerAudioContext();
+      }
+      await startTimerLoop(restartAt, false);
+    })();
+  };
+
+  const handleToggleTimerSound = () => {
+    setIsTimerSoundEnabled((prev) => {
+      const next = !prev;
+      if (next) {
+        void ensureTimerAudioContext();
+      }
+      return next;
+    });
   };
 
   const handleToggleTimerFlowMode = async () => {
@@ -1513,12 +1653,13 @@ export default function App() {
                 background: '#1f2335',
               }}
             >
-              <ActionButton label={getShortcutLabel('reset-random-history', shortcutHintSide, shortcutHintsVisible)} onClick={handleResetRandomHistory} disabled={isIndexing} />
-              <ActionButton label={getShortcutLabel('reset-normal-history', shortcutHintSide, shortcutHintsVisible)} onClick={handleResetNormalHistory} disabled={isIndexing} />
-              <ActionButton label={getShortcutLabel('full-wipe', shortcutHintSide, shortcutHintsVisible)} onClick={handleFullWipe} disabled={isIndexing} />
-            </div>
-          </div>
-        )}
+               <ActionButton label={getShortcutLabel('reset-random-history', shortcutHintSide, shortcutHintsVisible)} onClick={handleResetRandomHistory} disabled={isIndexing} />
+               <ActionButton label={getShortcutLabel('reset-normal-history', shortcutHintSide, shortcutHintsVisible)} onClick={handleResetNormalHistory} disabled={isIndexing} />
+               <ActionButton label={getShortcutLabel('full-wipe', shortcutHintSide, shortcutHintsVisible)} onClick={handleFullWipe} disabled={isIndexing} />
+               <ActionButton label={isTimerSoundEnabled ? 'mute' : 'unmute'} onClick={handleToggleTimerSound} disabled={isIndexing} />
+             </div>
+           </div>
+         )}
 
         <div
           data-testid="image-container"

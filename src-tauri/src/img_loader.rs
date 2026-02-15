@@ -862,6 +862,29 @@ impl ImageLoader {
         Ok((data, auto_switched))
     }
 
+    pub async fn get_current_random_image_or_last(&self) -> Result<(Vec<u8>, bool), Box<dyn std::error::Error>> {
+        let (folder_id, auto_switched) = self.ensure_images_indexed().await?;
+        if self.random_history_count(folder_id)? == 0 {
+            return self.get_force_random_image(true).await;
+        }
+
+        let visible = self.get_visible_random_entries(folder_id)?;
+        if visible.is_empty() {
+            return self.get_force_random_image(true).await;
+        }
+
+        let current_order_index = self.get_current_folder_random_index(folder_id)?;
+        let selected = visible
+            .iter()
+            .find(|(order_index, _, _)| *order_index == current_order_index)
+            .cloned()
+            .unwrap_or_else(|| visible[visible.len() - 1].clone());
+
+        self.set_current_folder_random_index(folder_id, selected.0)?;
+        let data = self.load_by_image_id(selected.1).await?;
+        Ok((data, auto_switched))
+    }
+
     pub async fn get_force_random_image(
         &self,
         force_pointer_to_last: bool,
