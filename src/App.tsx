@@ -47,6 +47,7 @@ import { getShortcutLabel, findActionByKey, SHORTCUT_REGISTRY } from './shortcut
 const INITIAL_TIMER_STORAGE_KEY = 'timer.initial_seconds';
 const REMAINING_TIMER_STORAGE_KEY = 'timer.remaining_seconds';
 const TIMER_SOUND_ENABLED_STORAGE_KEY = 'timer.sound_enabled';
+const TIMER_SOUND_VOLUME_STEP_STORAGE_KEY = 'timer.sound_volume_step';
 const FOLDER_HISTORY_MODE_KEY = 'folder.history_mode';
 
 type TimerFlowMode = 'random' | 'normal';
@@ -144,6 +145,16 @@ function readPersistedBoolean(key: string, fallback: boolean): boolean {
   return fallback;
 }
 
+function readPersistedVolumeStep(key: string, fallback: number): number {
+  const raw = globalThis.localStorage?.getItem(key);
+  if (!raw) return fallback;
+
+  const parsed = Number(raw);
+  if (!Number.isFinite(parsed)) return fallback;
+  const step = Math.floor(parsed);
+  return Math.min(10, Math.max(1, step));
+}
+
 export default function App() {
   const [imageSrc, setImageSrc] = useState('');
   const [history, setHistory] = useState<ImageHistoryItem[]>([]);
@@ -156,6 +167,7 @@ export default function App() {
   const [initialTimerSeconds, setInitialTimerSeconds] = useState(() => readPersistedSeconds(INITIAL_TIMER_STORAGE_KEY, 10));
   const [remainingTimerSeconds, setRemainingTimerSeconds] = useState(() => readPersistedSeconds(REMAINING_TIMER_STORAGE_KEY, 10));
   const [isTimerSoundEnabled, setIsTimerSoundEnabled] = useState(() => readPersistedBoolean(TIMER_SOUND_ENABLED_STORAGE_KEY, true));
+  const [timerSoundVolumeStep, setTimerSoundVolumeStep] = useState(() => readPersistedVolumeStep(TIMER_SOUND_VOLUME_STEP_STORAGE_KEY, 10));
   const [isTimerRunning, setIsTimerRunning] = useState(false);
   const [timerFlowMode, setTimerFlowMode] = useState<TimerFlowMode>('random');
   const [activeHistoryMode, setActiveHistoryMode] = useState<'normal' | 'random'>('normal');
@@ -186,6 +198,7 @@ export default function App() {
   const timerHoldCaptureBufferRef = useRef('');
   const timerAudioContextRef = useRef<AudioContext | null>(null);
   const timerAudioErrorShownRef = useRef(false);
+  const timerVolumeSliderTrackRef = useRef<HTMLDivElement | null>(null);
 
   const loadHistory = async (history: ImageHistory, mode: 'normal' | 'random') => {
     setHistory(history.history);
@@ -227,6 +240,9 @@ export default function App() {
 
   const isTypingTarget = (target: EventTarget | null): boolean => {
     if (!(target instanceof Element)) return false;
+    if (target instanceof HTMLInputElement && target.type === 'range') {
+      return false;
+    }
     const tag = target.tagName.toLowerCase();
     return tag === 'input' || tag === 'textarea' || target.hasAttribute('contenteditable');
   };
@@ -260,16 +276,27 @@ export default function App() {
     return ctx;
   };
 
-  const playTimerTone = async (tone: 'low' | 'mid' | 'high') => {
+  const playTimerTone = async (tone: 'low' | 'mid' | 'high', volumeStepOverride?: number) => {
     const ctx = await ensureTimerAudioContext();
     if (!ctx) return;
 
+    const normalizeVolumeStep = (step: number): number => Math.min(10, Math.max(1, Math.floor(step)));
+    const volumeStepToMasterGain = (step: number): number => (normalizeVolumeStep(step) / 10) * 0.98;
+    const toneGainMultiplier = (toneKind: 'low' | 'mid' | 'high'): number => {
+      if (toneKind === 'low') return 1.2;
+      if (toneKind === 'high') return 1.08;
+      return 1;
+    };
+
     const now = ctx.currentTime;
+    const volumeStep = normalizeVolumeStep(volumeStepOverride ?? timerSoundVolumeStep);
+    const masterGain = volumeStepToMasterGain(volumeStep);
+    const gain = Math.min(0.98, masterGain * toneGainMultiplier(tone));
     const settings = tone === 'low'
-      ? { freq: 440, duration: 0.16, gain: 0.09 }
+      ? { freq: 440, duration: 0.14, gain }
       : tone === 'mid'
-        ? { freq: 660, duration: 0.14, gain: 0.0825 }
-        : { freq: 880, duration: 0.12, gain: 0.075 };
+        ? { freq: 660, duration: 0.14, gain }
+        : { freq: 880, duration: 0.14, gain };
 
     const gainNode = ctx.createGain();
     gainNode.gain.setValueAtTime(0.0001, now);
@@ -287,7 +314,7 @@ export default function App() {
     oscSine.type = 'sine';
     oscSine.frequency.setValueAtTime(settings.freq * 2, now);
     const sineGain = ctx.createGain();
-    sineGain.gain.setValueAtTime(0.18, now);
+    sineGain.gain.setValueAtTime(0.08, now);
     oscSine.connect(sineGain);
     sineGain.connect(gainNode);
 
@@ -494,6 +521,10 @@ export default function App() {
   }, [isTimerSoundEnabled]);
 
   useEffect(() => {
+    globalThis.localStorage?.setItem(TIMER_SOUND_VOLUME_STEP_STORAGE_KEY, String(timerSoundVolumeStep));
+  }, [timerSoundVolumeStep]);
+
+  useEffect(() => {
     return () => {
       const ctx = timerAudioContextRef.current;
       if (!ctx) return;
@@ -525,7 +556,7 @@ export default function App() {
 
     if (!tone) return;
     void playTimerTone(tone);
-  }, [isTimerRunning, isTimerSoundEnabled, remainingTimerSeconds]);
+  }, [isTimerRunning, isTimerSoundEnabled, remainingTimerSeconds, timerSoundVolumeStep]);
 
   useEffect(() => {
     timerFlowModeRef.current = timerFlowMode;
@@ -790,6 +821,7 @@ export default function App() {
 
   const historyVisualSize = 31;
   const half = Math.floor(historyVisualSize / 2);
+  const timerVolumeSliderRatio = (timerSoundVolumeStep - 1) / 9;
 
   const windowItems = Array.from({ length: historyVisualSize }, (_, i) => {
     const historyIndexAtSlot = historyIndex + (i - half);
@@ -1282,6 +1314,39 @@ export default function App() {
     });
   };
 
+  const handleTimerSoundVolumeStepChange = (nextStep: number, playPreview: boolean) => {
+    const bounded = Math.min(10, Math.max(1, Math.floor(nextStep)));
+    const changed = bounded !== timerSoundVolumeStep;
+    if (!changed) {
+      return;
+    }
+    setTimerSoundVolumeStep(bounded);
+    if (playPreview) {
+      if (isTimerSoundEnabled) {
+        void playTimerTone('mid', bounded);
+      }
+      return;
+    }
+    if (isTimerSoundEnabled) {
+      void ensureTimerAudioContext();
+    }
+  };
+
+  const updateTimerVolumeFromPointer = (clientX: number, playPreview: boolean) => {
+    const track = timerVolumeSliderTrackRef.current;
+    if (!track) return;
+    const rect = track.getBoundingClientRect();
+    if (rect.width <= 0) return;
+
+    const thumbWidth = 12;
+    const travelWidth = rect.width - thumbWidth;
+    if (travelWidth <= 0) return;
+    const travelX = Math.min(travelWidth, Math.max(0, clientX - rect.left - thumbWidth / 2));
+    const ratio = travelX / travelWidth;
+    const step = Math.round(ratio * 9) + 1;
+    handleTimerSoundVolumeStepChange(step, playPreview);
+  };
+
   const handleToggleTimerFlowMode = async () => {
     const next = timerFlowMode === 'random' ? 'normal' : 'random';
     setTimerFlowMode(next);
@@ -1646,17 +1711,125 @@ export default function App() {
                 display: 'flex',
                 flexDirection: 'row',
                 alignItems: 'center',
-                gap: '6px',
+                gap: '8px',
                 flexWrap: 'wrap',
-                padding: '8px',
-                border: '1px solid #414868',
-                background: '#1f2335',
               }}
             >
-               <ActionButton label={getShortcutLabel('reset-random-history', shortcutHintSide, shortcutHintsVisible)} onClick={handleResetRandomHistory} disabled={isIndexing} />
-               <ActionButton label={getShortcutLabel('reset-normal-history', shortcutHintSide, shortcutHintsVisible)} onClick={handleResetNormalHistory} disabled={isIndexing} />
-               <ActionButton label={getShortcutLabel('full-wipe', shortcutHintSide, shortcutHintsVisible)} onClick={handleFullWipe} disabled={isIndexing} />
-               <ActionButton label={isTimerSoundEnabled ? 'mute' : 'unmute'} onClick={handleToggleTimerSound} disabled={isIndexing} />
+              <div
+                style={{
+                  display: 'flex',
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  gap: '6px',
+                  flexWrap: 'wrap',
+                  padding: '8px',
+                  border: '1px solid #414868',
+                  background: '#1f2335',
+                }}
+              >
+                <ActionButton label={getShortcutLabel('reset-random-history', shortcutHintSide, shortcutHintsVisible)} onClick={handleResetRandomHistory} disabled={isIndexing} />
+                <ActionButton label={getShortcutLabel('reset-normal-history', shortcutHintSide, shortcutHintsVisible)} onClick={handleResetNormalHistory} disabled={isIndexing} />
+                <ActionButton label={getShortcutLabel('full-wipe', shortcutHintSide, shortcutHintsVisible)} onClick={handleFullWipe} disabled={isIndexing} />
+              </div>
+
+              <div
+                style={{
+                  display: 'flex',
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  gap: '8px',
+                  flexWrap: 'wrap',
+                  padding: '8px',
+                  border: '1px solid #414868',
+                  background: '#1f2335',
+                }}
+              >
+                <ActionButton label={isTimerSoundEnabled ? 'mute' : 'unmute'} onClick={handleToggleTimerSound} disabled={isIndexing} />
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    color: '#c0caf5',
+                    fontFamily: 'monospace',
+                    fontSize: '12px',
+                    letterSpacing: '0.04em',
+                    opacity: isIndexing ? 0.55 : 1,
+                  }}
+                >
+                  <span>vol {timerSoundVolumeStep * 10}%</span>
+                  <div
+                    ref={timerVolumeSliderTrackRef}
+                    role="slider"
+                    aria-label="timer sound volume"
+                    aria-valuemin={10}
+                    aria-valuemax={100}
+                    aria-valuenow={timerSoundVolumeStep * 10}
+                    onPointerDown={(event) => {
+                      if (isIndexing) return;
+                      event.preventDefault();
+                      event.currentTarget.setPointerCapture(event.pointerId);
+                      updateTimerVolumeFromPointer(event.clientX, true);
+                    }}
+                    onPointerMove={(event) => {
+                      if (isIndexing) return;
+                      if (!event.currentTarget.hasPointerCapture(event.pointerId)) return;
+                      updateTimerVolumeFromPointer(event.clientX, true);
+                    }}
+                    onPointerUp={(event) => {
+                      if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+                        event.currentTarget.releasePointerCapture(event.pointerId);
+                      }
+                      updateTimerVolumeFromPointer(event.clientX, false);
+                    }}
+                    style={{
+                      position: 'relative',
+                      width: '150px',
+                      height: '18px',
+                      boxSizing: 'border-box',
+                      cursor: isIndexing ? 'not-allowed' : 'pointer',
+                    }}
+                  >
+                    <div
+                      style={{
+                        position: 'absolute',
+                        left: '6px',
+                        right: '6px',
+                        top: '6px',
+                        height: '6px',
+                        background: '#24283b',
+                        border: '1px solid #565f89',
+                        zIndex: 1,
+                      }}
+                    />
+                    <div
+                      style={{
+                        position: 'absolute',
+                        left: '7px',
+                        top: '6px',
+                        height: '6px',
+                        width: `${timerVolumeSliderRatio * 136}px`,
+                        background: '#2b3550',
+                        boxSizing: 'border-box',
+                        zIndex: 2,
+                      }}
+                    />
+                    <div
+                      style={{
+                        position: 'absolute',
+                        top: '1px',
+                        left: `calc(6px + ${timerVolumeSliderRatio * 136}px - 6px)`,
+                        width: '12px',
+                        height: '16px',
+                        background: '#7aa2f7',
+                        border: '1px solid #c0caf5',
+                        boxSizing: 'border-box',
+                        zIndex: 3,
+                      }}
+                    />
+                  </div>
+                </div>
+              </div>
              </div>
            </div>
          )}
