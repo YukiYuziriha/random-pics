@@ -1,5 +1,5 @@
 ## random-pics
-Ridiculously fast desktop local image viewer for gesture drawing and reference practice.
+Fast desktop local image viewer for gesture drawing and reference practice.
 If you touch-type, the UI shortcuts should feel natural on first use.
 
 ![random-pics UI showcase](./showcase.png)
