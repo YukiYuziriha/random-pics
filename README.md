@@ -53,6 +53,24 @@ Output files are generated per platform in:
 
 Typical outputs include `.deb`/`.AppImage` on Linux, `.dmg` on macOS, and `.msi` on Windows.
 
+## install
+
+Debian/Ubuntu from release asset:
+```bash
+sudo apt install -y ./random-pics_1.0.0_amd64.deb
+```
+
+Arch via AUR (once `random-pics-bin` is published):
+```bash
+yay -S random-pics-bin
+```
+
+Arch direct from AppImage release asset:
+```bash
+chmod +x ./random-pics_1.0.0_amd64.AppImage
+./random-pics_1.0.0_amd64.AppImage
+```
+
 Run installed app:
 ```bash
 random-pics
