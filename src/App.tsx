@@ -324,6 +324,20 @@ export default function App() {
     oscSine.stop(now + settings.duration + 0.03);
   };
 
+  const playTimerToneBurst = (tone: 'low' | 'mid' | 'high', count: number, spacingMs = 55) => {
+    const total = Math.max(1, Math.floor(count));
+    void (async () => {
+      for (let i = 0; i < total; i += 1) {
+        await playTimerTone(tone);
+        if (i < total - 1) {
+          await new Promise<void>((resolve) => {
+            window.setTimeout(resolve, spacingMs);
+          });
+        }
+      }
+    })();
+  };
+
   const commitTimerHoldCapture = () => {
     const buffer = timerHoldCaptureBufferRef.current;
     if (buffer.length > 0) {
@@ -546,16 +560,27 @@ export default function App() {
     if (!isTimerSoundEnabled) return;
 
     let tone: 'low' | 'mid' | 'high' | null = null;
+    let burstCount = 1;
     if (timeLeft % 60 === 0) {
       tone = 'low';
     } else if (timeLeft === 30) {
       tone = 'mid';
+    } else if (timeLeft === 20) {
+      tone = 'mid';
+      burstCount = 2;
+    } else if (timeLeft === 10) {
+      tone = 'mid';
+      burstCount = 3;
     } else if (timeLeft >= 1 && timeLeft <= 5) {
       tone = 'high';
     }
 
     if (!tone) return;
-    void playTimerTone(tone);
+    if (burstCount === 1) {
+      void playTimerTone(tone);
+      return;
+    }
+    playTimerToneBurst(tone, burstCount);
   }, [isTimerRunning, isTimerSoundEnabled, remainingTimerSeconds, timerSoundVolumeStep]);
 
   useEffect(() => {
@@ -1154,9 +1179,15 @@ export default function App() {
     stopTimerRef.current = null;
   };
 
-  const startTimerLoop = async (seconds: number, serveImageOnStart: boolean): Promise<boolean> => {
+  const startTimerLoop = async (
+    seconds: number,
+    serveImageOnStart: boolean,
+    setCycleResetSeconds: boolean
+  ): Promise<boolean> => {
     const startAt = sanitizeSeconds(seconds);
-    timerLoopStartSecondsRef.current = startAt;
+    if (setCycleResetSeconds) {
+      timerLoopStartSecondsRef.current = startAt;
+    }
 
     clearActiveTimer();
 
@@ -1179,7 +1210,7 @@ export default function App() {
   const resetTimerAfterManualNavigation = () => {
     const resetTo = sanitizeSeconds(timerLoopStartSecondsRef.current);
     if (isTimerRunning) {
-      void startTimerLoop(resetTo, false);
+      void startTimerLoop(resetTo, false, false);
     } else {
       setRemainingTimerSeconds(resetTo);
     }
@@ -1284,7 +1315,7 @@ export default function App() {
     if (isTimerSoundEnabled) {
       await ensureTimerAudioContext();
     }
-    await startTimerLoop(startAt, true);
+    await startTimerLoop(startAt, true, true);
   };
 
   const handleTogglePausePlay = () => {
@@ -1300,7 +1331,7 @@ export default function App() {
       if (isTimerSoundEnabled) {
         await ensureTimerAudioContext();
       }
-      await startTimerLoop(restartAt, false);
+      await startTimerLoop(restartAt, false, false);
     })();
   };
 
