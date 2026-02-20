@@ -16,6 +16,29 @@ If you touch-type, the UI shortcuts should feel natural on first use.
 ## additional shortcuts
 - hold **z** or **/** key, enter number of seconds, release key to update start/stop timer value
 
+## install
+
+Debian/Ubuntu from release asset:
+```bash
+sudo apt install -y ./random-pics_1.0.0_amd64.deb
+```
+
+Arch via AUR (once `random-pics-bin` is published):
+```bash
+yay -S random-pics-bin
+```
+
+Arch direct from AppImage release asset:
+```bash
+chmod +x ./random-pics_1.0.0_amd64.AppImage
+./random-pics_1.0.0_amd64.AppImage
+```
+
+Run installed app:
+```bash
+random-pics
+```
+
 ## dev run
 Requirements:
 - Bun
@@ -53,28 +76,6 @@ Output files are generated per platform in:
 
 Typical outputs include `.deb`/`.AppImage` on Linux, `.dmg` on macOS, and `.msi` on Windows.
 
-## install
-
-Debian/Ubuntu from release asset:
-```bash
-sudo apt install -y ./random-pics_1.0.0_amd64.deb
-```
-
-Arch via AUR (once `random-pics-bin` is published):
-```bash
-yay -S random-pics-bin
-```
-
-Arch direct from AppImage release asset:
-```bash
-chmod +x ./random-pics_1.0.0_amd64.AppImage
-./random-pics_1.0.0_amd64.AppImage
-```
-
-Run installed app:
-```bash
-random-pics
-```
 
 ## change workflow (important)
 If you change `src/App.tsx` (or any frontend file):
