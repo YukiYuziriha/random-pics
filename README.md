@@ -2,6 +2,8 @@
 Ridiculously fast desktop local image viewer for gesture drawing and reference practice.
 If you touch-type, the UI shortcuts should feel natural on first use.
 
+![random-pics UI showcase](./showcase.png)
+
 ## what it does
 - opens large image folders quickly, works natively with nested folders (folders inside folders)
 - lets you browse in order or shuffle randomly
