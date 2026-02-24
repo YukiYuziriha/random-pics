@@ -1,0 +1,73 @@
+:root {
+  --tui-scroll-track: #1a1e2f;
+  --tui-scroll-track-border: #2a3048;
+  --tui-scroll-thumb: #5f688f;
+  --tui-scroll-thumb-border: #3f4768;
+  --tui-scroll-thumb-hover: #7781ae;
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--tui-scroll-thumb) var(--tui-scroll-track);
+}
+
+*::-webkit-scrollbar {
+  width: 12px;
+  height: 12px;
+}
+
+*::-webkit-scrollbar-track {
+  background: var(--tui-scroll-track);
+  border: 1px solid var(--tui-scroll-track-border);
+}
+
+*::-webkit-scrollbar-thumb {
+  background: var(--tui-scroll-thumb);
+  border: 1px solid var(--tui-scroll-thumb-border);
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background: var(--tui-scroll-thumb-hover);
+}
+
+*::-webkit-scrollbar-corner {
+  background: var(--tui-scroll-track);
+}
+
+.folder-tree-list {
+  scrollbar-width: thin;
+  scrollbar-color: var(--tui-scroll-thumb) var(--tui-scroll-track);
+}
+
+.folder-tree-list::-webkit-scrollbar {
+  width: 12px;
+  height: 12px;
+}
+
+.folder-tree-list::-webkit-scrollbar-track {
+  background: var(--tui-scroll-track);
+  border: 1px solid var(--tui-scroll-track-border);
+}
+
+.folder-tree-list::-webkit-scrollbar-thumb {
+  background: var(--tui-scroll-thumb);
+  border: 1px solid var(--tui-scroll-thumb-border);
+}
+
+.folder-tree-list::-webkit-scrollbar-thumb:hover {
+  background: var(--tui-scroll-thumb-hover);
+}
+
+.folder-tree-list::-webkit-scrollbar-corner {
+  background: var(--tui-scroll-track);
+}
+
+.custom-scroll-viewport {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.custom-scroll-viewport::-webkit-scrollbar {
+  width: 0 !important;
+  height: 0 !important;
+}

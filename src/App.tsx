@@ -8,6 +8,9 @@ import {
   getNextFolder,
   getPrevFolder,
   getFolderHistory,
+  getFolderTree,
+  setFolderChecked,
+  setFolderExclusive,
   reindexCurrentFolder,
   getCurrentImage,
   getCurrentRandomImage,
@@ -37,18 +40,27 @@ import {
   type ImageState,
   type FolderInfo,
   type ImageResponse,
+  type FolderTreeNode,
 } from './apiClient.ts';
 import { FolderControls } from './components/FolderControls.tsx';
 import { HistoryPanel } from './components/HistoryPanel.tsx';
+import { FolderTreePanel } from './components/FolderTreePanel.tsx';
 import { ImageControls } from './components/ImageControls.tsx';
 import { ActionButton } from './components/ActionButton.tsx';
 import { getShortcutLabel, findActionByKey, SHORTCUT_REGISTRY } from './shortcuts.ts';
+import {
+  countCheckedRoots,
+  deriveFolderTree,
+  flattenVisibleTree,
+  type FolderTreeState,
+} from './folderTree.ts';
 
 const INITIAL_TIMER_STORAGE_KEY = 'timer.initial_seconds';
 const REMAINING_TIMER_STORAGE_KEY = 'timer.remaining_seconds';
 const TIMER_SOUND_ENABLED_STORAGE_KEY = 'timer.sound_enabled';
 const TIMER_SOUND_VOLUME_STEP_STORAGE_KEY = 'timer.sound_volume_step';
 const FOLDER_HISTORY_MODE_KEY = 'folder.history_mode';
+const FOLDER_TREE_EXPANDED_STORAGE_KEY = 'folder.tree.expanded_paths';
 
 type TimerFlowMode = 'random' | 'normal';
 
@@ -80,6 +92,25 @@ function setFolderHistoryMode(folderId: number, mode: 'normal' | 'random') {
   const modes = readFolderHistoryMode();
   modes[folderId] = mode;
   writeFolderHistoryMode(modes);
+}
+
+function readExpandedFolderPaths(): Set<string> {
+  const raw = globalThis.localStorage?.getItem(FOLDER_TREE_EXPANDED_STORAGE_KEY);
+  if (!raw) return new Set();
+  try {
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return new Set();
+    return new Set(parsed.filter((value): value is string => typeof value === 'string'));
+  } catch {
+    return new Set();
+  }
+}
+
+function writeExpandedFolderPaths(paths: Set<string>) {
+  globalThis.localStorage?.setItem(
+    FOLDER_TREE_EXPANDED_STORAGE_KEY,
+    JSON.stringify(Array.from(paths)),
+  );
 }
 
 type PersistedUiState = {
@@ -161,6 +192,7 @@ export default function App() {
   const [historyIndex, setHistoryIndex] = useState(-1);
   const [folderHistory, setFolderHistory] = useState<FolderHistoryItem[]>([]);
   const [folderHistoryIndex, setFolderHistoryIndex] = useState(-1);
+  const [folderTree, setFolderTree] = useState<FolderTreeState>({ nodes: {}, rootPaths: [] });
   const [verticalMirror, setVerticalMirror] = useState(false);
   const [horizontalMirror, setHorizontalMirror] = useState(false);
   const [greyscale, setGreyscale] = useState(false);
@@ -199,6 +231,7 @@ export default function App() {
   const timerAudioContextRef = useRef<AudioContext | null>(null);
   const timerAudioErrorShownRef = useRef(false);
   const timerVolumeSliderTrackRef = useRef<HTMLDivElement | null>(null);
+  const expandedFolderPathsRef = useRef<Set<string>>(readExpandedFolderPaths());
 
   const loadHistory = async (history: ImageHistory, mode: 'normal' | 'random') => {
     setHistory(history.history);
@@ -240,11 +273,20 @@ export default function App() {
 
   const isTypingTarget = (target: EventTarget | null): boolean => {
     if (!(target instanceof Element)) return false;
-    if (target instanceof HTMLInputElement && target.type === 'range') {
-      return false;
+    if (target instanceof HTMLInputElement) {
+      const textInputTypes = new Set([
+        'text',
+        'search',
+        'url',
+        'tel',
+        'email',
+        'password',
+        'number',
+      ]);
+      return textInputTypes.has(target.type);
     }
     const tag = target.tagName.toLowerCase();
-    return tag === 'input' || tag === 'textarea' || target.hasAttribute('contenteditable');
+    return tag === 'textarea' || target.hasAttribute('contenteditable');
   };
 
   const ensureTimerAudioContext = async (): Promise<AudioContext | null> => {
@@ -373,12 +415,14 @@ export default function App() {
 
     if (auto_switched_folder) {
       await loadFolderHistory();
+      await loadFolderTree();
       showToast(`Switched to folder: ${folder.path}`);
     }
   };
 
   const handleBackendError = async (err: unknown) => {
     await loadFolderHistory();
+    await loadFolderTree();
     showToast(formatError(err));
   };
 
@@ -396,6 +440,85 @@ export default function App() {
     setFolderHistory(data.history);
     setFolderHistoryIndex(data.currentIndex);
     return data;
+  };
+
+  const loadFolderTree = async (): Promise<FolderTreeNode[]> => {
+    const tree = await getFolderTree();
+    setFolderTree((prev) => {
+      const knownPaths = new Set(tree.map((node) => node.path));
+      const filteredExpanded = new Set<string>();
+      for (const path of expandedFolderPathsRef.current) {
+        if (knownPaths.has(path)) {
+          filteredExpanded.add(path);
+        }
+      }
+
+      if (filteredExpanded.size !== expandedFolderPathsRef.current.size) {
+        expandedFolderPathsRef.current = filteredExpanded;
+        writeExpandedFolderPaths(filteredExpanded);
+      }
+
+      return deriveFolderTree(tree, prev, expandedFolderPathsRef.current);
+    });
+    return tree;
+  };
+
+  const handleToggleFolderExpand = (path: string) => {
+    setFolderTree((prev) => {
+      const node = prev.nodes[path];
+      if (!node) return prev;
+      const nextExpanded = !node.expanded;
+      const nextExpandedPaths = new Set(expandedFolderPathsRef.current);
+      if (nextExpanded) {
+        nextExpandedPaths.add(path);
+        expandedFolderPathsRef.current = nextExpandedPaths;
+        writeExpandedFolderPaths(nextExpandedPaths);
+        return {
+          ...prev,
+          nodes: {
+            ...prev.nodes,
+            [path]: {
+              ...node,
+              expanded: true,
+            },
+          },
+        };
+      }
+
+      const nodes = { ...prev.nodes };
+      const collapseRecursively = (targetPath: string) => {
+        const target = nodes[targetPath];
+        if (!target) return;
+        nextExpandedPaths.delete(targetPath);
+        nodes[targetPath] = { ...target, expanded: false };
+        for (const childPath of target.children) {
+          collapseRecursively(childPath);
+        }
+      };
+
+      collapseRecursively(path);
+      expandedFolderPathsRef.current = nextExpandedPaths;
+      writeExpandedFolderPaths(nextExpandedPaths);
+      return {
+        ...prev,
+        nodes,
+      };
+    });
+  };
+
+  const handleToggleFolderChecked = async (path: string, checked: boolean) => {
+    const ok = await runOp(() => setFolderChecked(path, checked));
+    if (ok === null) {
+      await loadFolderTree();
+      return;
+    }
+    void loadFolderTree();
+  };
+
+  const handleExclusiveSelectFolder = async (path: string) => {
+    const ok = await runOp(() => setFolderExclusive(path));
+    if (ok === null) return;
+    await loadFolderTree();
   };
 
   const loadPreferredHistoryForFolder = async (folderId: number): Promise<void> => {
@@ -474,6 +597,7 @@ export default function App() {
     try {
       const folderInfo = await pickFolder(folderPath);
       await loadFolderHistory();
+      await loadFolderTree();
       const imageData = await getCurrentImage();
       await handleLoadImage(imageData);
       await loadPreferredHistoryForFolder(folderInfo.id);
@@ -496,6 +620,7 @@ export default function App() {
   useEffect(() => {
     const initialize = async () => {
       const folderData = await loadFolderHistory();
+      await loadFolderTree();
       const persistedUiState = await loadImageState();
 
       if (folderData.currentIndex >= 0) {
@@ -863,6 +988,8 @@ export default function App() {
     }
     return folderHistory[historyIndexAtSlot] ?? null;
   });
+  const folderTreeItems = flattenVisibleTree(folderTree);
+  const checkedFolderCount = countCheckedRoots(folderTree);
 
   const handleFolderItemClick = async (slotIndex: number) => {
     if (isIndexing) return;
@@ -874,6 +1001,7 @@ export default function App() {
     try {
       const folderInfo = await setFolderByIndex(targetIndex);
       await loadFolderHistory();
+      await loadFolderTree();
       const imageData = await getCurrentImage();
       await handleLoadImage(imageData);
       await loadPreferredHistoryForFolder(folderInfo.id);
@@ -896,6 +1024,7 @@ export default function App() {
     if (ok === null) return;
 
     await loadFolderHistory();
+    await loadFolderTree();
 
     const currentFolder = await runOp(() => getCurrentFolder());
     if (!currentFolder) {
@@ -993,6 +1122,7 @@ export default function App() {
     const folderInfo = await runOp(() => getPrevFolder());
     if (!folderInfo) return;
     await loadFolderHistory();
+    await loadFolderTree();
     const imageData = await runOp(() => getCurrentImage());
     if (!imageData) return;
     await handleLoadImage(imageData);
@@ -1017,6 +1147,7 @@ export default function App() {
       return;
     }
     await loadFolderHistory();
+    await loadFolderTree();
     const imageData = await runOp(() => getCurrentImage());
     if (!imageData) {
       endIndexingUi(false);
@@ -1034,6 +1165,7 @@ export default function App() {
     const folderInfo = await runOp(() => getNextFolder());
     if (!folderInfo) return;
     await loadFolderHistory();
+    await loadFolderTree();
     const imageData = await runOp(() => getCurrentImage());
     if (!imageData) return;
     await handleLoadImage(imageData);
@@ -1050,6 +1182,7 @@ export default function App() {
     setHistoryIndex(-1);
     setFolderHistory([]);
     setFolderHistoryIndex(-1);
+    setFolderTree({ nodes: {}, rootPaths: [] });
   };
 
   const handlePrevImage = async () => {
@@ -1689,16 +1822,24 @@ export default function App() {
       )}
 
       {showFolderHistoryPanel && (
-        <HistoryPanel
-          panelTestId="folder-history-panel"
-          listContainerTestId="folder-list-container"
-          listItemTestId="folder-list-item"
-          items={folderWindowItems}
-          currentSlotIndex={half}
-          pendingItem={indexingFolderPath}
-          onItemClick={handleFolderItemClick}
-          onFolderDeleteClick={handleFolderDeleteClick}
-        />
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', alignSelf: 'center' }}>
+          <div
+            style={{
+              color: '#9aa5ce',
+              fontFamily: 'monospace',
+              fontSize: '12px',
+              textAlign: 'center',
+            }}
+          >
+            checked folders: {checkedFolderCount}
+          </div>
+          <FolderTreePanel
+            nodes={folderTreeItems}
+            onToggleExpand={handleToggleFolderExpand}
+            onToggleChecked={handleToggleFolderChecked}
+            onExclusiveSelect={handleExclusiveSelectFolder}
+          />
+        </div>
       )}
 
       <div
