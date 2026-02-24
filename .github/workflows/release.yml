@@ -65,3 +65,268 @@ jobs:
           releaseDraft: false
           prerelease: false
           args: --bundles ${{ matrix.bundles }}
+
+  publish-aur:
+    if: startsWith(github.ref, 'refs/tags/v') && secrets.AUR_SSH_PRIVATE_KEY != ''
+    needs: publish-tauri
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Resolve version
+        id: version
+        shell: bash
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          if [ -z "$version" ]; then
+            exit 1
+          fi
+          printf "version=%s\n" "$version" >> "$GITHUB_OUTPUT"
+
+      - name: Download release deb and hash
+        id: deb
+        shell: bash
+        run: |
+          version="${{ steps.version.outputs.version }}"
+          deb_name="random-pics_${version}_amd64.deb"
+          deb_url="https://github.com/${{ github.repository }}/releases/download/v${version}/${deb_name}"
+          curl -fsL "$deb_url" -o "$deb_name"
+          sha256="$(sha256sum "$deb_name" | cut -d ' ' -f1)"
+          printf "deb_url=%s\n" "$deb_url" >> "$GITHUB_OUTPUT"
+          printf "sha256=%s\n" "$sha256" >> "$GITHUB_OUTPUT"
+
+      - name: Setup AUR SSH
+        shell: bash
+        run: |
+          install -m 700 -d ~/.ssh
+          printf "%s\n" "${{ secrets.AUR_SSH_PRIVATE_KEY }}" > ~/.ssh/aur
+          chmod 600 ~/.ssh/aur
+          cat > ~/.ssh/config <<'EOF'
+          Host aur.archlinux.org
+            HostName aur.archlinux.org
+            User aur
+            IdentityFile ~/.ssh/aur
+            IdentitiesOnly yes
+            StrictHostKeyChecking accept-new
+          EOF
+
+      - name: Clone AUR repo
+        shell: bash
+        run: |
+          git clone ssh://aur@aur.archlinux.org/random-pics-bin.git aur-repo
+
+      - name: Update PKGBUILD and .SRCINFO
+        shell: bash
+        run: |
+          version="${{ steps.version.outputs.version }}"
+          deb_url="${{ steps.deb.outputs.deb_url }}"
+          sha256="${{ steps.deb.outputs.sha256 }}"
+
+          cat > aur-repo/PKGBUILD <<EOF
+          pkgname=random-pics-bin
+          pkgver=${version}
+          pkgrel=1
+          pkgdesc="Fast desktop local image viewer for gesture drawing practice"
+          arch=('x86_64')
+          url="https://github.com/YukiYuziriha/random-pics"
+          license=('MIT')
+          depends=('glibc' 'gtk3' 'webkit2gtk-4.1')
+          provides=('random-pics')
+          conflicts=('random-pics')
+          _deb="random-pics_\${pkgver}_amd64.deb"
+          source=(
+            "${deb_url}"
+          )
+          sha256sums=(
+            '${sha256}'
+          )
+
+          package() {
+            cd "\${srcdir}"
+            bsdtar -xf "\${_deb}"
+            bsdtar -xf data.tar.gz -C "\${pkgdir}"
+          }
+          EOF
+
+          cat > aur-repo/.SRCINFO <<EOF
+          pkgbase = random-pics-bin
+          	pkgdesc = Fast desktop local image viewer for gesture drawing practice
+          	pkgver = ${version}
+          	pkgrel = 1
+          	url = https://github.com/YukiYuziriha/random-pics
+          	arch = x86_64
+          	license = MIT
+          	depends = glibc
+          	depends = gtk3
+          	depends = webkit2gtk-4.1
+          	provides = random-pics
+          	conflicts = random-pics
+          	source = ${deb_url}
+          	sha256sums = ${sha256}
+
+          pkgname = random-pics-bin
+          EOF
+
+      - name: Publish to AUR
+        shell: bash
+        run: |
+          cd aur-repo
+          git config user.name "random-pics-bot"
+          git config user.email "actions@github.com"
+          git add PKGBUILD .SRCINFO
+          if git diff --cached --quiet; then
+            exit 0
+          fi
+          git commit -m "update to ${{ steps.version.outputs.version }}"
+          git push
+
+  publish-apt:
+    if: startsWith(github.ref, 'refs/tags/v') && secrets.APT_GPG_PRIVATE_KEY != ''
+    needs: publish-tauri
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install apt repo tooling
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y dpkg-dev gnupg
+
+      - name: Resolve version
+        id: version
+        shell: bash
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          if [ -z "$version" ]; then
+            exit 1
+          fi
+          printf "version=%s\n" "$version" >> "$GITHUB_OUTPUT"
+
+      - name: Download release deb
+        id: deb
+        shell: bash
+        run: |
+          version="${{ steps.version.outputs.version }}"
+          deb_name="random-pics_${version}_amd64.deb"
+          deb_url="https://github.com/${{ github.repository }}/releases/download/v${version}/${deb_name}"
+          for _ in $(seq 1 30); do
+            if curl -fsL "$deb_url" -o "$deb_name"; then
+              break
+            fi
+            sleep 10
+          done
+          if [ ! -f "$deb_name" ]; then
+            echo "Could not download release deb asset" >&2
+            exit 1
+          fi
+          printf "deb_name=%s\n" "$deb_name" >> "$GITHUB_OUTPUT"
+
+      - name: Setup signing key
+        id: signing
+        shell: bash
+        run: |
+          export GNUPGHOME="$(mktemp -d)"
+          chmod 700 "$GNUPGHOME"
+          printf "%s\n" "${{ secrets.APT_GPG_PRIVATE_KEY }}" | gpg --batch --import
+          fingerprint="$(gpg --batch --with-colons --list-secret-keys | awk -F: '/^fpr:/ {print $10; exit}')"
+          if [ -z "$fingerprint" ]; then
+            echo "Could not resolve GPG fingerprint" >&2
+            exit 1
+          fi
+          printf "fingerprint=%s\n" "$fingerprint" >> "$GITHUB_OUTPUT"
+          printf "GNUPGHOME=%s\n" "$GNUPGHOME" >> "$GITHUB_OUTPUT"
+
+      - name: Checkout gh-pages branch
+        shell: bash
+        run: |
+          if git ls-remote --exit-code --heads origin gh-pages >/dev/null 2>&1; then
+            git clone --branch gh-pages "https://github.com/${{ github.repository }}.git" gh-pages
+          else
+            git clone "https://github.com/${{ github.repository }}.git" gh-pages
+            cd gh-pages
+            git checkout --orphan gh-pages
+            git rm -rf . || true
+            cd -
+          fi
+
+      - name: Build apt repository metadata
+        shell: bash
+        run: |
+          version="${{ steps.version.outputs.version }}"
+          deb_name="${{ steps.deb.outputs.deb_name }}"
+          repo_root="gh-pages/apt"
+          distro_root="$repo_root/dists/stable"
+          binary_root="$distro_root/main/binary-amd64"
+          pool_root="$repo_root/pool/main"
+
+          mkdir -p "$binary_root" "$pool_root" "$repo_root/keyrings"
+          cp -f "$deb_name" "$pool_root/$deb_name"
+
+          (cd gh-pages && dpkg-scanpackages --arch amd64 apt/pool /dev/null > "apt/dists/stable/main/binary-amd64/Packages")
+          gzip -9c "$binary_root/Packages" > "$binary_root/Packages.gz"
+
+          date_rfc="$(LC_ALL=C date -Ru)"
+          cat > "$distro_root/Release" <<EOF
+          Origin: random-pics
+          Label: random-pics
+          Suite: stable
+          Codename: stable
+          Architectures: amd64
+          Components: main
+          Description: random-pics apt repository
+          Date: ${date_rfc}
+          EOF
+
+          pushd "$repo_root" >/dev/null
+          {
+            echo "MD5Sum:"
+            md5sum "dists/stable/main/binary-amd64/Packages" | awk '{printf " %s %16d %s\n", $1, $2, "main/binary-amd64/Packages"}'
+            md5sum "dists/stable/main/binary-amd64/Packages.gz" | awk '{printf " %s %16d %s\n", $1, $2, "main/binary-amd64/Packages.gz"}'
+            echo "SHA256:"
+            sha256sum "dists/stable/main/binary-amd64/Packages" | awk '{printf " %s %16d %s\n", $1, $2, "main/binary-amd64/Packages"}'
+            sha256sum "dists/stable/main/binary-amd64/Packages.gz" | awk '{printf " %s %16d %s\n", $1, $2, "main/binary-amd64/Packages.gz"}'
+          } >> "dists/stable/Release"
+          popd >/dev/null
+
+      - name: Sign apt repository metadata
+        shell: bash
+        env:
+          GNUPGHOME: ${{ steps.signing.outputs.GNUPGHOME }}
+          APT_GPG_PASSPHRASE: ${{ secrets.APT_GPG_PASSPHRASE }}
+        run: |
+          fingerprint="${{ steps.signing.outputs.fingerprint }}"
+          release_path="gh-pages/apt/dists/stable/Release"
+          inrelease_path="gh-pages/apt/dists/stable/InRelease"
+          release_sig_path="gh-pages/apt/dists/stable/Release.gpg"
+          keyring_asc="gh-pages/apt/keyrings/random-pics-archive-keyring.asc"
+          keyring_gpg="gh-pages/apt/keyrings/random-pics-archive-keyring.gpg"
+
+          gpg_opts=(--batch --yes --pinentry-mode loopback)
+          if [ -n "$APT_GPG_PASSPHRASE" ]; then
+            gpg_opts+=(--passphrase "$APT_GPG_PASSPHRASE")
+          fi
+
+          gpg "${gpg_opts[@]}" --detach-sign --local-user "$fingerprint" --output "$release_sig_path" "$release_path"
+          gpg "${gpg_opts[@]}" --clearsign --local-user "$fingerprint" --output "$inrelease_path" "$release_path"
+
+          gpg --batch --armor --export "$fingerprint" > "$keyring_asc"
+          gpg --batch --yes --dearmor --output "$keyring_gpg" "$keyring_asc"
+
+      - name: Publish apt repository to gh-pages
+        shell: bash
+        run: |
+          cd gh-pages
+          git config user.name "random-pics-bot"
+          git config user.email "actions@github.com"
+          git add apt
+          if git diff --cached --quiet; then
+            exit 0
+          fi
+          git commit -m "apt repo: update ${{ steps.version.outputs.version }}"
+          git push origin gh-pages

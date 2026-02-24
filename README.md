@@ -18,9 +18,19 @@ If you touch-type, the UI shortcuts should feel natural on first use.
 
 ## install
 
-Debian/Ubuntu from release asset:
+Debian/Ubuntu via apt repository:
 ```bash
-sudo apt install -y ./random-pics_1.0.0_amd64.deb
+curl -fsSL https://yukiyuziriha.github.io/random-pics/apt/keyrings/random-pics-archive-keyring.gpg \
+  | sudo tee /usr/share/keyrings/random-pics-archive-keyring.gpg >/dev/null
+echo "deb [signed-by=/usr/share/keyrings/random-pics-archive-keyring.gpg] https://yukiyuziriha.github.io/random-pics/apt stable main" \
+  | sudo tee /etc/apt/sources.list.d/random-pics.list >/dev/null
+sudo apt update
+sudo apt install -y random-pics
+```
+
+Debian/Ubuntu one-off install from latest release asset:
+```bash
+bash <(curl -fsSL https://raw.githubusercontent.com/YukiYuziriha/random-pics/main/scripts/install-latest-deb.sh)
 ```
 
 Arch via AUR (once `random-pics-bin` is published):
@@ -30,8 +40,8 @@ yay -S random-pics-bin
 
 Arch direct from AppImage release asset:
 ```bash
-chmod +x ./random-pics_1.0.0_amd64.AppImage
-./random-pics_1.0.0_amd64.AppImage
+chmod +x ./random-pics_1.1.0_amd64.AppImage
+./random-pics_1.1.0_amd64.AppImage
 ```
 
 Run installed app:
