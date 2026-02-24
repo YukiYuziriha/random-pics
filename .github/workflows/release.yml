@@ -2,12 +2,67 @@ name: release
 
 on:
   push:
+    branches:
+      - main
     tags:
       - 'v*'
   workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to publish (defaults to src-tauri/Cargo.toml package.version)'
+        required: false
+        type: string
+      force_publish:
+        description: 'Publish even if GitHub release tag already exists'
+        required: false
+        default: false
+        type: boolean
 
 jobs:
+  resolve-version:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      publish: ${{ steps.version.outputs.publish }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Resolve publish version
+        id: version
+        shell: bash
+        env:
+          INPUT_VERSION: ${{ github.event.inputs.version }}
+          INPUT_FORCE_PUBLISH: ${{ github.event.inputs.force_publish }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
+            version="${GITHUB_REF_NAME#v}"
+            publish="true"
+          else
+            if [[ -n "${INPUT_VERSION}" ]]; then
+              version="${INPUT_VERSION}"
+            else
+              version="$(python -c "import tomllib; print(tomllib.load(open('src-tauri/Cargo.toml','rb'))['package']['version'])")"
+            fi
+
+            if [[ "${INPUT_FORCE_PUBLISH}" == "true" ]]; then
+              publish="true"
+            elif gh release view "v${version}" >/dev/null 2>&1; then
+              publish="false"
+            else
+              publish="true"
+            fi
+          fi
+
+          printf "version=%s\n" "${version}" >> "${GITHUB_OUTPUT}"
+          printf "publish=%s\n" "${publish}" >> "${GITHUB_OUTPUT}"
+
   publish-tauri:
+    if: needs.resolve-version.outputs.publish == 'true'
+    needs: resolve-version
     permissions:
       contents: write
     strategy:
@@ -59,16 +114,18 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          tagName: ${{ github.ref_name }}
-          releaseName: random-pics ${{ github.ref_name }}
+          tagName: v${{ needs.resolve-version.outputs.version }}
+          releaseName: random-pics v${{ needs.resolve-version.outputs.version }}
           releaseBody: Installers for Linux, Windows, and macOS.
           releaseDraft: false
           prerelease: false
           args: --bundles ${{ matrix.bundles }}
 
   publish-aur:
-    if: startsWith(github.ref, 'refs/tags/v') && secrets.AUR_SSH_PRIVATE_KEY != ''
-    needs: publish-tauri
+    if: needs.resolve-version.outputs.publish == 'true' && secrets.AUR_SSH_PRIVATE_KEY != ''
+    needs:
+      - resolve-version
+      - publish-tauri
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -76,21 +133,11 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Resolve version
-        id: version
-        shell: bash
-        run: |
-          version="${GITHUB_REF_NAME#v}"
-          if [ -z "$version" ]; then
-            exit 1
-          fi
-          printf "version=%s\n" "$version" >> "$GITHUB_OUTPUT"
-
       - name: Download release deb and hash
         id: deb
         shell: bash
         run: |
-          version="${{ steps.version.outputs.version }}"
+          version="${{ needs.resolve-version.outputs.version }}"
           deb_name="random-pics_${version}_amd64.deb"
           deb_url="https://github.com/${{ github.repository }}/releases/download/v${version}/${deb_name}"
           curl -fsL "$deb_url" -o "$deb_name"
@@ -121,7 +168,7 @@ jobs:
       - name: Update PKGBUILD and .SRCINFO
         shell: bash
         run: |
-          version="${{ steps.version.outputs.version }}"
+          version="${{ needs.resolve-version.outputs.version }}"
           deb_url="${{ steps.deb.outputs.deb_url }}"
           sha256="${{ steps.deb.outputs.sha256 }}"
 
@@ -180,12 +227,14 @@ jobs:
           if git diff --cached --quiet; then
             exit 0
           fi
-          git commit -m "update to ${{ steps.version.outputs.version }}"
+          git commit -m "update to ${{ needs.resolve-version.outputs.version }}"
           git push
 
   publish-apt:
-    if: startsWith(github.ref, 'refs/tags/v') && secrets.APT_GPG_PRIVATE_KEY != ''
-    needs: publish-tauri
+    if: needs.resolve-version.outputs.publish == 'true' && secrets.APT_GPG_PRIVATE_KEY != ''
+    needs:
+      - resolve-version
+      - publish-tauri
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -198,21 +247,11 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y dpkg-dev gnupg
 
-      - name: Resolve version
-        id: version
-        shell: bash
-        run: |
-          version="${GITHUB_REF_NAME#v}"
-          if [ -z "$version" ]; then
-            exit 1
-          fi
-          printf "version=%s\n" "$version" >> "$GITHUB_OUTPUT"
-
       - name: Download release deb
         id: deb
         shell: bash
         run: |
-          version="${{ steps.version.outputs.version }}"
+          version="${{ needs.resolve-version.outputs.version }}"
           deb_name="random-pics_${version}_amd64.deb"
           deb_url="https://github.com/${{ github.repository }}/releases/download/v${version}/${deb_name}"
           for _ in $(seq 1 30); do
@@ -258,7 +297,7 @@ jobs:
       - name: Build apt repository metadata
         shell: bash
         run: |
-          version="${{ steps.version.outputs.version }}"
+          version="${{ needs.resolve-version.outputs.version }}"
           deb_name="${{ steps.deb.outputs.deb_name }}"
           repo_root="gh-pages/apt"
           distro_root="$repo_root/dists/stable"
@@ -328,5 +367,5 @@ jobs:
           if git diff --cached --quiet; then
             exit 0
           fi
-          git commit -m "apt repo: update ${{ steps.version.outputs.version }}"
+          git commit -m "apt repo: update ${{ needs.resolve-version.outputs.version }}"
           git push origin gh-pages

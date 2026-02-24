@@ -1,8 +1,13 @@
 # Apt repository automation
 
-This project can publish a signed apt repository to GitHub Pages on every tagged release.
+This project can publish a signed apt repository to GitHub Pages whenever `src-tauri/Cargo.toml` version changes on `main` (and also on tagged releases).
 
 Workflow job: `publish-apt` in `.github/workflows/release.yml`.
+
+For manual re-publish of an existing version, use `workflow_dispatch` with:
+
+- `version`: the target version
+- `force_publish`: `true`
 
 ## One-time setup
 

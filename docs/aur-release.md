@@ -6,12 +6,17 @@
 
 This repo now includes `publish-aur` in `.github/workflows/release.yml`.
 
-When a new release tag is published (`v*`), the workflow will:
+When `src-tauri/Cargo.toml` package version changes on `main` (or when a `v*` tag is pushed), the workflow will:
 
 1. Download the matching `.deb` release asset.
 2. Compute sha256.
 3. Update `PKGBUILD` + `.SRCINFO` in the AUR repo.
 4. Commit and push to `random-pics-bin` on AUR.
+
+For manual re-publish of an existing version, use `workflow_dispatch` with:
+
+- `version`: the target version
+- `force_publish`: `true`
 
 ### Required GitHub secret
 
