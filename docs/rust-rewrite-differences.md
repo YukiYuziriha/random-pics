@@ -28,6 +28,7 @@ It is focused on real logic/UI differences, not just file moves.
 5. History rows now support hover actions:
    - folder history rows expose left-side delete (history-only, no filesystem delete),
    - image history rows expose right-side hide for current mode list.
+6. Folder tree expand arrows are now dimmed and non-interactive for leaf folders with no children.
 
 ## Hidden Image Behavior
 

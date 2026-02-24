@@ -151,25 +151,30 @@ export function FolderTreePanel({
           scrollbarGutter: 'stable',
         }}
       >
-        {nodes.map((node) => (
-          <div
-            key={node.path}
-            data-testid="folder-tree-item"
-            onClick={() => onToggleExpand(node.path)}
-            onDoubleClick={() => onExclusiveSelect(node.path)}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px',
-              height: '24px',
-              paddingLeft: `${node.depth * 14 + 4}px`,
-              paddingRight: '4px',
-              color: '#c0caf5',
-              borderRadius: '2px',
-              cursor: 'pointer',
-              userSelect: 'none',
-            }}
-          >
+        {nodes.map((node) => {
+          const hasChildren = node.children.length > 0;
+          return (
+            <div
+              key={node.path}
+              data-testid="folder-tree-item"
+              onClick={() => {
+                if (!hasChildren) return;
+                onToggleExpand(node.path);
+              }}
+              onDoubleClick={() => onExclusiveSelect(node.path)}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                height: '24px',
+                paddingLeft: `${node.depth * 14 + 4}px`,
+                paddingRight: '4px',
+                color: '#c0caf5',
+                borderRadius: '2px',
+                cursor: hasChildren ? 'pointer' : 'default',
+                userSelect: 'none',
+              }}
+            >
             <input
               ref={(el) => {
                 checkboxRefs.current[node.path] = el;
@@ -199,33 +204,37 @@ export function FolderTreePanel({
               {folderLabel(node.path, node.imageCount)}
             </span>
 
-            <button
-              aria-label="toggle-folder-expand"
-              onMouseDown={(event) => {
-                event.preventDefault();
-              }}
-              onClick={(event) => {
-                event.stopPropagation();
-                onToggleExpand(node.path);
-                event.currentTarget.blur();
-              }}
-              style={{
-                border: 'none',
-                background: 'transparent',
-                color: '#9aa5ce',
-                cursor: 'pointer',
-                width: '16px',
-                height: '16px',
-                padding: 0,
-                flexShrink: 0,
-                transform: node.expanded ? 'rotate(90deg)' : 'rotate(0deg)',
-                transition: 'transform 100ms linear',
-              }}
-            >
-              {'>'}
-            </button>
-          </div>
-        ))}
+              <button
+                aria-label="toggle-folder-expand"
+                disabled={!hasChildren}
+                onMouseDown={(event) => {
+                  event.preventDefault();
+                }}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  if (!hasChildren) return;
+                  onToggleExpand(node.path);
+                  event.currentTarget.blur();
+                }}
+                style={{
+                  border: 'none',
+                  background: 'transparent',
+                  color: hasChildren ? '#9aa5ce' : '#4b526e',
+                  cursor: hasChildren ? 'pointer' : 'default',
+                  width: '16px',
+                  height: '16px',
+                  padding: 0,
+                  flexShrink: 0,
+                  opacity: hasChildren ? 1 : 0.8,
+                  transform: node.expanded && hasChildren ? 'rotate(90deg)' : 'rotate(0deg)',
+                  transition: hasChildren ? 'transform 100ms linear' : 'none',
+                }}
+              >
+                {'>'}
+              </button>
+            </div>
+          );
+        })}
       </div>
       <div
         onMouseDown={handleRailMouseDown}
