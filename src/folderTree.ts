@@ -18,7 +18,8 @@ export type FolderTreeState = {
 export type FolderTreeFlatNode = FolderTreeStateNode & { depth: number };
 
 function baseName(path: string): string {
-  const pieces = path.split('/').filter((p) => p.length > 0);
+  const normalizedPath = path.replaceAll('\\', '/');
+  const pieces = normalizedPath.split('/').filter((p) => p.length > 0);
   return pieces[pieces.length - 1] ?? path;
 }
 
