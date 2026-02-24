@@ -43,6 +43,16 @@ pub struct FolderHistory {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
+pub struct FolderTreeNode {
+    pub path: String,
+    #[serde(rename = "parentPath")]
+    pub parent_path: Option<String>,
+    #[serde(rename = "imageCount")]
+    pub image_count: i64,
+    pub checked: bool,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
 pub struct ImageState {
     #[serde(rename = "verticalMirror")]
     pub vertical_mirror: bool,
@@ -123,8 +133,49 @@ fn sanitize_error_message(raw: &str) -> String {
         return "all images are hidden for this folder and mode - reindex to clear hidden images"
             .to_string();
     }
+    if raw.contains("No folders selected. Check at least one folder.") {
+        return "No folders selected. Check at least one folder.".to_string();
+    }
     // Pass through all other errors as-is
     raw.to_string()
+}
+
+#[tauri::command]
+pub async fn get_folder_tree(
+    state: State<'_, ImageLoaderState>,
+) -> Result<Vec<FolderTreeNode>, CommandError> {
+    let loader = get_loader(&state)?;
+    let nodes = loader.get_folder_tree()?;
+    Ok(nodes
+        .into_iter()
+        .map(|(path, parent_path, image_count, checked)| FolderTreeNode {
+            path,
+            parent_path,
+            image_count,
+            checked,
+        })
+        .collect())
+}
+
+#[tauri::command]
+pub async fn set_folder_checked(
+    path: String,
+    checked: bool,
+    state: State<'_, ImageLoaderState>,
+) -> Result<(), CommandError> {
+    let loader = get_loader(&state)?;
+    loader.set_folder_checked(&path, checked)?;
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn set_folder_exclusive(
+    path: String,
+    state: State<'_, ImageLoaderState>,
+) -> Result<(), CommandError> {
+    let loader = get_loader(&state)?;
+    loader.set_folder_exclusive(&path)?;
+    Ok(())
 }
 
 fn get_loader(state: &State<ImageLoaderState>) -> Result<Arc<ImageLoader>, CommandError> {
@@ -247,12 +298,20 @@ pub async fn get_current_image(
     state: State<'_, ImageLoaderState>,
 ) -> Result<ImageResponse, CommandError> {
     let loader = get_loader(&state)?;
-    let (data, auto_switched) = loader.get_current_image_or_first().await.map_err(CommandError::from)?;
-    let folder = loader.get_current_folder_id_and_path()
+    let (data, auto_switched) = loader
+        .get_current_image_or_first()
+        .await
+        .map_err(CommandError::from)?;
+    let folder = loader
+        .get_current_folder_id_and_path()
         .ok()
         .flatten()
         .map(|(id, path)| FolderInfo { id, path });
-    Ok(ImageResponse { data, folder, auto_switched_folder: auto_switched })
+    Ok(ImageResponse {
+        data,
+        folder,
+        auto_switched_folder: auto_switched,
+    })
 }
 
 #[tauri::command]
@@ -260,34 +319,56 @@ pub async fn get_current_random_image(
     state: State<'_, ImageLoaderState>,
 ) -> Result<ImageResponse, CommandError> {
     let loader = get_loader(&state)?;
-    let (data, auto_switched) = loader.get_current_random_image_or_last().await.map_err(CommandError::from)?;
-    let folder = loader.get_current_folder_id_and_path()
+    let (data, auto_switched) = loader
+        .get_current_random_image_or_last()
+        .await
+        .map_err(CommandError::from)?;
+    let folder = loader
+        .get_current_folder_id_and_path()
         .ok()
         .flatten()
         .map(|(id, path)| FolderInfo { id, path });
-    Ok(ImageResponse { data, folder, auto_switched_folder: auto_switched })
+    Ok(ImageResponse {
+        data,
+        folder,
+        auto_switched_folder: auto_switched,
+    })
 }
 
 #[tauri::command]
-pub async fn get_next_image(state: State<'_, ImageLoaderState>) -> Result<ImageResponse, CommandError> {
+pub async fn get_next_image(
+    state: State<'_, ImageLoaderState>,
+) -> Result<ImageResponse, CommandError> {
     let loader = get_loader(&state)?;
     let (data, auto_switched) = loader.get_next_image().await.map_err(CommandError::from)?;
-    let folder = loader.get_current_folder_id_and_path()
+    let folder = loader
+        .get_current_folder_id_and_path()
         .ok()
         .flatten()
         .map(|(id, path)| FolderInfo { id, path });
-    Ok(ImageResponse { data, folder, auto_switched_folder: auto_switched })
+    Ok(ImageResponse {
+        data,
+        folder,
+        auto_switched_folder: auto_switched,
+    })
 }
 
 #[tauri::command]
-pub async fn get_prev_image(state: State<'_, ImageLoaderState>) -> Result<ImageResponse, CommandError> {
+pub async fn get_prev_image(
+    state: State<'_, ImageLoaderState>,
+) -> Result<ImageResponse, CommandError> {
     let loader = get_loader(&state)?;
     let (data, auto_switched) = loader.get_prev_image().await.map_err(CommandError::from)?;
-    let folder = loader.get_current_folder_id_and_path()
+    let folder = loader
+        .get_current_folder_id_and_path()
         .ok()
         .flatten()
         .map(|(id, path)| FolderInfo { id, path });
-    Ok(ImageResponse { data, folder, auto_switched_folder: auto_switched })
+    Ok(ImageResponse {
+        data,
+        folder,
+        auto_switched_folder: auto_switched,
+    })
 }
 
 #[tauri::command]
@@ -295,12 +376,20 @@ pub async fn get_next_random_image(
     state: State<'_, ImageLoaderState>,
 ) -> Result<ImageResponse, CommandError> {
     let loader = get_loader(&state)?;
-    let (data, auto_switched) = loader.get_next_random_image().await.map_err(CommandError::from)?;
-    let folder = loader.get_current_folder_id_and_path()
+    let (data, auto_switched) = loader
+        .get_next_random_image()
+        .await
+        .map_err(CommandError::from)?;
+    let folder = loader
+        .get_current_folder_id_and_path()
         .ok()
         .flatten()
         .map(|(id, path)| FolderInfo { id, path });
-    Ok(ImageResponse { data, folder, auto_switched_folder: auto_switched })
+    Ok(ImageResponse {
+        data,
+        folder,
+        auto_switched_folder: auto_switched,
+    })
 }
 
 #[tauri::command]
@@ -308,12 +397,20 @@ pub async fn get_prev_random_image(
     state: State<'_, ImageLoaderState>,
 ) -> Result<ImageResponse, CommandError> {
     let loader = get_loader(&state)?;
-    let (data, auto_switched) = loader.get_prev_random_image().await.map_err(CommandError::from)?;
-    let folder = loader.get_current_folder_id_and_path()
+    let (data, auto_switched) = loader
+        .get_prev_random_image()
+        .await
+        .map_err(CommandError::from)?;
+    let folder = loader
+        .get_current_folder_id_and_path()
         .ok()
         .flatten()
         .map(|(id, path)| FolderInfo { id, path });
-    Ok(ImageResponse { data, folder, auto_switched_folder: auto_switched })
+    Ok(ImageResponse {
+        data,
+        folder,
+        auto_switched_folder: auto_switched,
+    })
 }
 
 #[tauri::command]
@@ -321,12 +418,20 @@ pub async fn get_force_random_image(
     state: State<'_, ImageLoaderState>,
 ) -> Result<ImageResponse, CommandError> {
     let loader = get_loader(&state)?;
-    let (data, auto_switched) = loader.get_force_random_image(true).await.map_err(CommandError::from)?;
-    let folder = loader.get_current_folder_id_and_path()
+    let (data, auto_switched) = loader
+        .get_force_random_image(true)
+        .await
+        .map_err(CommandError::from)?;
+    let folder = loader
+        .get_current_folder_id_and_path()
         .ok()
         .flatten()
         .map(|(id, path)| FolderInfo { id, path });
-    Ok(ImageResponse { data, folder, auto_switched_folder: auto_switched })
+    Ok(ImageResponse {
+        data,
+        folder,
+        auto_switched_folder: auto_switched,
+    })
 }
 
 #[tauri::command]
@@ -442,12 +547,20 @@ pub async fn set_normal_image_by_index(
     state: State<'_, ImageLoaderState>,
 ) -> Result<ImageResponse, CommandError> {
     let loader = get_loader(&state)?;
-    let (data, auto_switched) = loader.set_normal_image_by_index(index).await.map_err(CommandError::from)?;
-    let folder = loader.get_current_folder_id_and_path()
+    let (data, auto_switched) = loader
+        .set_normal_image_by_index(index)
+        .await
+        .map_err(CommandError::from)?;
+    let folder = loader
+        .get_current_folder_id_and_path()
         .ok()
         .flatten()
         .map(|(id, path)| FolderInfo { id, path });
-    Ok(ImageResponse { data, folder, auto_switched_folder: auto_switched })
+    Ok(ImageResponse {
+        data,
+        folder,
+        auto_switched_folder: auto_switched,
+    })
 }
 
 #[tauri::command]
@@ -456,12 +569,20 @@ pub async fn set_random_image_by_index(
     state: State<'_, ImageLoaderState>,
 ) -> Result<ImageResponse, CommandError> {
     let loader = get_loader(&state)?;
-    let (data, auto_switched) = loader.set_random_image_by_index(index).await.map_err(CommandError::from)?;
-    let folder = loader.get_current_folder_id_and_path()
+    let (data, auto_switched) = loader
+        .set_random_image_by_index(index)
+        .await
+        .map_err(CommandError::from)?;
+    let folder = loader
+        .get_current_folder_id_and_path()
         .ok()
         .flatten()
         .map(|(id, path)| FolderInfo { id, path });
-    Ok(ImageResponse { data, folder, auto_switched_folder: auto_switched })
+    Ok(ImageResponse {
+        data,
+        folder,
+        auto_switched_folder: auto_switched,
+    })
 }
 
 #[tauri::command]
@@ -494,20 +615,20 @@ pub async fn cleanup_stale_folders(
     let loader = get_loader(&state)?;
     let history = loader.get_folder_history()?;
     let mut removed_paths = Vec::new();
-    
+
     for (folder_id, path, _, _) in history {
         if !std::path::Path::new(&path).exists() {
             loader.delete_folder_by_id(folder_id)?;
             removed_paths.push(path);
         }
     }
-    
+
     Ok(removed_paths)
 }
 
 #[cfg(test)]
 mod tests {
-    use super::resolve_dual_i64_arg;
+    use super::{resolve_dual_i64_arg, sanitize_error_message};
 
     #[test]
     fn resolve_dual_i64_arg_accepts_camel_case() {
@@ -519,5 +640,48 @@ mod tests {
     fn resolve_dual_i64_arg_accepts_snake_case() {
         let value = resolve_dual_i64_arg(Some(1), None, "folder_id", "folderId").unwrap();
         assert_eq!(value, 1);
+    }
+
+    #[test]
+    fn resolve_dual_i64_arg_prefers_snake_case_when_both_are_present() {
+        let value = resolve_dual_i64_arg(Some(7), Some(3), "image_id", "imageId").unwrap();
+        assert_eq!(value, 7);
+    }
+
+    #[test]
+    fn resolve_dual_i64_arg_reports_missing_dual_name() {
+        let err = resolve_dual_i64_arg(None, None, "image_id", "imageId").unwrap_err();
+        assert_eq!(err.message, "missing imageId/image_id");
+    }
+
+    #[test]
+    fn sanitize_error_message_maps_foreign_key_constraint() {
+        let msg = sanitize_error_message("FOREIGN KEY constraint failed");
+        assert_eq!(
+            msg,
+            "database constraint failed - try resetting history or reindexing"
+        );
+    }
+
+    #[test]
+    fn sanitize_error_message_maps_no_rows_error() {
+        let msg = sanitize_error_message("query returned no rows");
+        assert_eq!(msg, "no data found - folder or image may have been deleted");
+    }
+
+    #[test]
+    fn sanitize_error_message_maps_hidden_images_error() {
+        let msg = sanitize_error_message("all images for this folder are hidden in random mode");
+        assert_eq!(
+            msg,
+            "all images are hidden for this folder and mode - reindex to clear hidden images"
+        );
+    }
+
+    #[test]
+    fn sanitize_error_message_passthrough_for_unknown_errors() {
+        let raw = "custom backend failure details";
+        let msg = sanitize_error_message(raw);
+        assert_eq!(msg, raw);
     }
 }

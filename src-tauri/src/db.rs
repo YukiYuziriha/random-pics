@@ -7,6 +7,8 @@ pub struct Db {
     conn: Arc<std::sync::Mutex<Connection>>,
 }
 
+const APP_DB_VERSION: &str = "1.1.0";
+
 impl Db {
     pub fn open(db_path: PathBuf) -> Result<Self> {
         eprintln!("[RUST] Db::open: opening database at {}", db_path.display());
@@ -14,10 +16,139 @@ impl Db {
         let db = Db {
             conn: Arc::new(std::sync::Mutex::new(conn)),
         };
+        db.ensure_meta_table()?;
+        db.wipe_legacy_db_if_needed()?;
         db.init_schema()?;
         db.run_migrations()?;
+        db.set_db_version(APP_DB_VERSION)?;
         eprintln!("[RUST] Db::open: database opened successfully");
         Ok(db)
+    }
+
+    fn ensure_meta_table(&self) -> Result<()> {
+        self.execute(
+            "CREATE TABLE IF NOT EXISTS app_meta (
+                key TEXT PRIMARY KEY,
+                value TEXT NOT NULL
+            )",
+            rusqlite::params![],
+        )?;
+        Ok(())
+    }
+
+    fn get_db_version(&self) -> Result<Option<String>> {
+        let conn = self.conn();
+        let mut stmt =
+            conn.prepare("SELECT value FROM app_meta WHERE key = 'db_version' LIMIT 1")?;
+        let mut rows = stmt.query(rusqlite::params![])?;
+        if let Some(row) = rows.next()? {
+            let value: String = row.get(0)?;
+            return Ok(Some(value));
+        }
+        Ok(None)
+    }
+
+    fn has_legacy_tables(&self) -> Result<bool> {
+        let count: i64 = self.query_row(
+            "SELECT COUNT(*)
+             FROM sqlite_master
+             WHERE type = 'table'
+               AND name IN (
+                 'folders',
+                 'images',
+                 'state',
+                 'random_history',
+                 'current_lap',
+                 'hidden_normal_images',
+                 'hidden_random_images',
+                 'folder_nodes',
+                 'checked_folders',
+                 'active_images'
+               )",
+            rusqlite::params![],
+            |row| row.get(0),
+        )?;
+        Ok(count > 0)
+    }
+
+    fn has_required_tables_for_current_version(&self) -> Result<bool> {
+        let count: i64 = self.query_row(
+            "SELECT COUNT(*)
+             FROM sqlite_master
+             WHERE type = 'table'
+               AND name IN (
+                 'app_meta',
+                 'folders',
+                 'images',
+                 'state',
+                 'random_history',
+                 'current_lap',
+                 'hidden_normal_images',
+                 'hidden_random_images',
+                 'folder_nodes',
+                 'checked_folders',
+                 'active_images',
+                 'active_image_refcounts',
+                 'folder_closure',
+                 'folder_images_direct',
+                 'random_history_global',
+                 'current_lap_global'
+               )",
+            rusqlite::params![],
+            |row| row.get(0),
+        )?;
+        Ok(count == 16)
+    }
+
+    fn wipe_legacy_db_if_needed(&self) -> Result<()> {
+        let version = self.get_db_version()?;
+        let schema_ok = self.has_required_tables_for_current_version()?;
+        if version.as_deref() == Some(APP_DB_VERSION) && schema_ok {
+            return Ok(());
+        }
+        if !self.has_legacy_tables()? {
+            return Ok(());
+        }
+
+        let mut conn = self.conn();
+        conn.execute("PRAGMA foreign_keys = OFF", rusqlite::params![])?;
+        let tx = conn.transaction()?;
+        tx.execute("DROP TABLE IF EXISTS random_history", rusqlite::params![])?;
+        tx.execute(
+            "DROP TABLE IF EXISTS random_history_global",
+            rusqlite::params![],
+        )?;
+        tx.execute("DROP TABLE IF EXISTS current_lap", rusqlite::params![])?;
+        tx.execute(
+            "DROP TABLE IF EXISTS current_lap_global",
+            rusqlite::params![],
+        )?;
+        tx.execute(
+            "DROP TABLE IF EXISTS hidden_normal_images",
+            rusqlite::params![],
+        )?;
+        tx.execute(
+            "DROP TABLE IF EXISTS hidden_random_images",
+            rusqlite::params![],
+        )?;
+        tx.execute("DROP TABLE IF EXISTS active_images", rusqlite::params![])?;
+        tx.execute("DROP TABLE IF EXISTS checked_folders", rusqlite::params![])?;
+        tx.execute("DROP TABLE IF EXISTS folder_nodes", rusqlite::params![])?;
+        tx.execute("DROP TABLE IF EXISTS images", rusqlite::params![])?;
+        tx.execute("DROP TABLE IF EXISTS folders", rusqlite::params![])?;
+        tx.execute("DROP TABLE IF EXISTS state", rusqlite::params![])?;
+        tx.commit()?;
+        conn.execute("PRAGMA foreign_keys = ON", rusqlite::params![])?;
+        Ok(())
+    }
+
+    fn set_db_version(&self, version: &str) -> Result<()> {
+        self.execute(
+            "INSERT INTO app_meta(key, value) VALUES('db_version', ?1)
+             ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+            rusqlite::params![version],
+        )?;
+        Ok(())
     }
 
     fn execute<P: rusqlite::Params>(&self, sql: &str, params: P) -> Result<usize> {
@@ -121,6 +252,7 @@ impl Db {
         )?;
 
         self.ensure_hidden_tables_and_indexes()?;
+        self.ensure_selection_tables_and_indexes()?;
 
         self.execute(
             "INSERT OR IGNORE INTO state (id) VALUES (1)",
@@ -143,6 +275,7 @@ impl Db {
         self.ensure_state_column("shortcut_hints_visible", "INTEGER NOT NULL DEFAULT 0")?;
         self.ensure_state_column("shortcut_hint_side", "TEXT NOT NULL DEFAULT 'left'")?;
         self.ensure_hidden_tables_and_indexes()?;
+        self.ensure_selection_tables_and_indexes()?;
         Ok(())
     }
 
@@ -371,6 +504,102 @@ impl Db {
         Ok(())
     }
 
+    fn ensure_selection_tables_and_indexes(&self) -> Result<()> {
+        self.execute(
+            "CREATE TABLE IF NOT EXISTS folder_nodes (
+                path TEXT PRIMARY KEY,
+                parent_path TEXT,
+                root_folder_id INTEGER NOT NULL,
+                subtree_image_count INTEGER NOT NULL DEFAULT 0,
+                FOREIGN KEY (root_folder_id) REFERENCES folders(id)
+            )",
+            rusqlite::params![],
+        )?;
+        self.execute(
+            "CREATE INDEX IF NOT EXISTS idx_folder_nodes_parent_path ON folder_nodes(parent_path)",
+            rusqlite::params![],
+        )?;
+        self.execute(
+            "CREATE INDEX IF NOT EXISTS idx_folder_nodes_root_folder_id ON folder_nodes(root_folder_id)",
+            rusqlite::params![],
+        )?;
+
+        self.execute(
+            "CREATE TABLE IF NOT EXISTS checked_folders (
+                path TEXT PRIMARY KEY,
+                FOREIGN KEY (path) REFERENCES folder_nodes(path)
+            )",
+            rusqlite::params![],
+        )?;
+
+        self.execute(
+            "CREATE TABLE IF NOT EXISTS active_images (
+                image_id INTEGER PRIMARY KEY,
+                FOREIGN KEY (image_id) REFERENCES images(id)
+            )",
+            rusqlite::params![],
+        )?;
+        self.execute(
+            "CREATE TABLE IF NOT EXISTS active_image_refcounts (
+                image_id INTEGER PRIMARY KEY,
+                refcount INTEGER NOT NULL,
+                FOREIGN KEY (image_id) REFERENCES images(id)
+            )",
+            rusqlite::params![],
+        )?;
+        self.execute(
+            "CREATE TABLE IF NOT EXISTS folder_closure (
+                ancestor_path TEXT NOT NULL,
+                descendant_path TEXT NOT NULL,
+                PRIMARY KEY (ancestor_path, descendant_path),
+                FOREIGN KEY (ancestor_path) REFERENCES folder_nodes(path),
+                FOREIGN KEY (descendant_path) REFERENCES folder_nodes(path)
+            )",
+            rusqlite::params![],
+        )?;
+        self.execute(
+            "CREATE INDEX IF NOT EXISTS idx_folder_closure_descendant ON folder_closure(descendant_path)",
+            rusqlite::params![],
+        )?;
+        self.execute(
+            "CREATE TABLE IF NOT EXISTS folder_images_direct (
+                folder_path TEXT NOT NULL,
+                image_id INTEGER NOT NULL,
+                PRIMARY KEY (folder_path, image_id),
+                FOREIGN KEY (folder_path) REFERENCES folder_nodes(path),
+                FOREIGN KEY (image_id) REFERENCES images(id)
+            )",
+            rusqlite::params![],
+        )?;
+        self.execute(
+            "CREATE INDEX IF NOT EXISTS idx_folder_images_direct_image ON folder_images_direct(image_id)",
+            rusqlite::params![],
+        )?;
+
+        self.execute(
+            "CREATE TABLE IF NOT EXISTS random_history_global (
+                order_index INTEGER PRIMARY KEY,
+                image_id INTEGER NOT NULL,
+                FOREIGN KEY (image_id) REFERENCES images(id)
+            )",
+            rusqlite::params![],
+        )?;
+
+        self.execute(
+            "CREATE TABLE IF NOT EXISTS current_lap_global (
+                image_id INTEGER PRIMARY KEY,
+                FOREIGN KEY (image_id) REFERENCES images(id)
+            )",
+            rusqlite::params![],
+        )?;
+
+        self.execute(
+            "CREATE INDEX IF NOT EXISTS idx_images_path ON images(path)",
+            rusqlite::params![],
+        )?;
+        Ok(())
+    }
+
     fn ensure_state_column(&self, column_name: &str, column_def: &str) -> Result<()> {
         let column_exists: Result<i64> = self.query_row(
             "SELECT COUNT(*) FROM pragma_table_info('state') WHERE name = ?1",
@@ -396,4 +625,243 @@ pub fn get_db_path(app: &AppHandle) -> Result<PathBuf, Box<dyn std::error::Error
     let app_data_dir = app.path().app_data_dir()?;
     std::fs::create_dir_all(&app_data_dir)?;
     Ok(app_data_dir.join("imgstate.sqlite"))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::Db;
+    use rusqlite::{params, Connection};
+    use std::path::PathBuf;
+    use std::sync::atomic::{AtomicU64, Ordering};
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    static TEST_COUNTER: AtomicU64 = AtomicU64::new(0);
+
+    fn unique_temp_db_path(name: &str) -> PathBuf {
+        let counter = TEST_COUNTER.fetch_add(1, Ordering::Relaxed);
+        let nanos = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_nanos();
+        std::env::temp_dir().join(format!(
+            "random_pics_{}_{}_{}_{}.sqlite",
+            name,
+            std::process::id(),
+            nanos,
+            counter
+        ))
+    }
+
+    #[test]
+    fn open_initializes_schema_and_state_row() {
+        let db_path = unique_temp_db_path("schema_init");
+        let db = Db::open(db_path.clone()).expect("db open should succeed");
+
+        let conn = db.conn();
+
+        let folders_table: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'folders'",
+                [],
+                |row| row.get(0),
+            )
+            .expect("folders table lookup should work");
+        assert_eq!(folders_table, 1);
+
+        let hidden_random_index: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM sqlite_master WHERE type = 'index' AND name = 'idx_hidden_random_folder'",
+                [],
+                |row| row.get(0),
+            )
+            .expect("hidden random index lookup should work");
+        assert_eq!(hidden_random_index, 1);
+
+        let folder_nodes_table: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'folder_nodes'",
+                [],
+                |row| row.get(0),
+            )
+            .expect("folder_nodes table lookup should work");
+        assert_eq!(folder_nodes_table, 1);
+
+        let active_images_table: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'active_images'",
+                [],
+                |row| row.get(0),
+            )
+            .expect("active_images table lookup should work");
+        assert_eq!(active_images_table, 1);
+
+        let state_row: i64 = conn
+            .query_row("SELECT COUNT(*) FROM state WHERE id = 1", [], |row| {
+                row.get(0)
+            })
+            .expect("state lookup should work");
+        assert_eq!(state_row, 1);
+
+        drop(conn);
+        std::fs::remove_file(db_path).expect("temp db should be removable");
+    }
+
+    #[test]
+    fn open_adds_missing_state_columns_via_migration() {
+        let db_path = unique_temp_db_path("state_migration");
+
+        let legacy = Connection::open(&db_path).expect("legacy db should open");
+        legacy
+            .execute_batch(
+                "
+                CREATE TABLE folders (
+                    id INTEGER PRIMARY KEY,
+                    path TEXT NOT NULL UNIQUE,
+                    added_at TEXT NOT NULL,
+                    current_index INTEGER NOT NULL DEFAULT -1,
+                    current_random_index INTEGER NOT NULL DEFAULT -1
+                );
+                CREATE TABLE images (
+                    id INTEGER PRIMARY KEY,
+                    path TEXT NOT NULL,
+                    folder_id INTEGER,
+                    FOREIGN KEY (folder_id) REFERENCES folders(id)
+                );
+                CREATE TABLE state (
+                    id INTEGER PRIMARY KEY CHECK (id = 1),
+                    current_index INTEGER NOT NULL DEFAULT -1,
+                    current_random_index INTEGER NOT NULL DEFAULT -1,
+                    current_folder_id INTEGER,
+                    vertical_mirror INTEGER NOT NULL DEFAULT 0,
+                    horizontal_mirror INTEGER NOT NULL DEFAULT 0,
+                    greyscale INTEGER NOT NULL DEFAULT 0
+                );
+                INSERT OR IGNORE INTO state (id) VALUES (1);
+                ",
+            )
+            .expect("legacy schema should be created");
+        drop(legacy);
+
+        let db = Db::open(db_path.clone()).expect("db open should migrate schema");
+        let conn = db.conn();
+
+        let timer_flow_mode_col: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM pragma_table_info('state') WHERE name = 'timer_flow_mode'",
+                [],
+                |row| row.get(0),
+            )
+            .expect("timer_flow_mode column lookup should work");
+        assert_eq!(timer_flow_mode_col, 1);
+
+        let shortcut_side_col: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM pragma_table_info('state') WHERE name = 'shortcut_hint_side'",
+                [],
+                |row| row.get(0),
+            )
+            .expect("shortcut_hint_side column lookup should work");
+        assert_eq!(shortcut_side_col, 1);
+
+        drop(conn);
+        std::fs::remove_file(db_path).expect("temp db should be removable");
+    }
+
+    #[test]
+    fn open_migrates_global_unique_image_path_to_folder_scoped_index() {
+        let db_path = unique_temp_db_path("images_unique_migration");
+
+        let legacy = Connection::open(&db_path).expect("legacy db should open");
+        legacy
+            .execute_batch(
+                "
+                CREATE TABLE folders (
+                    id INTEGER PRIMARY KEY,
+                    path TEXT NOT NULL UNIQUE,
+                    added_at TEXT NOT NULL,
+                    current_index INTEGER NOT NULL DEFAULT -1,
+                    current_random_index INTEGER NOT NULL DEFAULT -1
+                );
+                CREATE TABLE images (
+                    id INTEGER PRIMARY KEY,
+                    path TEXT NOT NULL UNIQUE,
+                    folder_id INTEGER,
+                    FOREIGN KEY (folder_id) REFERENCES folders(id)
+                );
+                CREATE TABLE state (
+                    id INTEGER PRIMARY KEY CHECK (id = 1),
+                    current_index INTEGER NOT NULL DEFAULT -1,
+                    current_random_index INTEGER NOT NULL DEFAULT -1,
+                    current_folder_id INTEGER,
+                    vertical_mirror INTEGER NOT NULL DEFAULT 0,
+                    horizontal_mirror INTEGER NOT NULL DEFAULT 0,
+                    greyscale INTEGER NOT NULL DEFAULT 0
+                );
+                INSERT OR IGNORE INTO state (id) VALUES (1);
+                ",
+            )
+            .expect("legacy schema should be created");
+        drop(legacy);
+
+        let db = Db::open(db_path.clone()).expect("db open should migrate unique index");
+        let conn = db.conn();
+
+        let global_unique_constraints: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM pragma_index_list('images') WHERE origin = 'u'",
+                [],
+                |row| row.get(0),
+            )
+            .expect("index list query should work");
+        assert_eq!(global_unique_constraints, 0);
+
+        conn.execute(
+            "INSERT INTO folders (path, added_at) VALUES (?1, ?2)",
+            params!["/tmp/folder-a", "now"],
+        )
+        .expect("folder-a insert should succeed");
+        conn.execute(
+            "INSERT INTO folders (path, added_at) VALUES (?1, ?2)",
+            params!["/tmp/folder-b", "now"],
+        )
+        .expect("folder-b insert should succeed");
+
+        let folder_a: i64 = conn
+            .query_row(
+                "SELECT id FROM folders WHERE path = ?1",
+                params!["/tmp/folder-a"],
+                |row| row.get(0),
+            )
+            .expect("folder-a id should exist");
+        let folder_b: i64 = conn
+            .query_row(
+                "SELECT id FROM folders WHERE path = ?1",
+                params!["/tmp/folder-b"],
+                |row| row.get(0),
+            )
+            .expect("folder-b id should exist");
+
+        conn.execute(
+            "INSERT INTO images (path, folder_id) VALUES (?1, ?2)",
+            params!["/tmp/shared-image.jpg", folder_a],
+        )
+        .expect("first image insert should succeed");
+        conn.execute(
+            "INSERT INTO images (path, folder_id) VALUES (?1, ?2)",
+            params!["/tmp/shared-image.jpg", folder_b],
+        )
+        .expect("same path in different folder should succeed");
+
+        let shared_count: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM images WHERE path = ?1",
+                params!["/tmp/shared-image.jpg"],
+                |row| row.get(0),
+            )
+            .expect("shared image count query should work");
+        assert_eq!(shared_count, 2);
+
+        drop(conn);
+        std::fs::remove_file(db_path).expect("temp db should be removable");
+    }
 }

@@ -489,10 +489,17 @@ export function setImageState(state: ImageState): void {
 }
 
 export function fullWipe(): void {
+  db.run("DELETE FROM random_history_global");
   db.run("DELETE FROM folders");
   db.run("DELETE FROM images");
   db.run("DELETE FROM random_history");
   db.run("DELETE FROM current_lap");
+  db.run("DELETE FROM current_lap_global");
+  db.run("DELETE FROM hidden_normal_images");
+  db.run("DELETE FROM hidden_random_images");
+  db.run("DELETE FROM active_images");
+  db.run("DELETE FROM checked_folders");
+  db.run("DELETE FROM folder_nodes");
   setCurrentFolderId.run({ $id: null });
   setLastImageIdQuery.run({ $lastImageId: null });
 }

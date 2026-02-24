@@ -28,6 +28,7 @@ It is focused on real logic/UI differences, not just file moves.
 5. History rows now support hover actions:
    - folder history rows expose left-side delete (history-only, no filesystem delete),
    - image history rows expose right-side hide for current mode list.
+6. Folder tree expand arrows are now dimmed and non-interactive for leaf folders with no children.
 
 ## Hidden Image Behavior
 
@@ -44,6 +45,12 @@ It is focused on real logic/UI differences, not just file moves.
 ## Folder Delete Behavior
 
 1. Deleting the current folder now falls back to the previous folder-history item (wraps), and the UI refreshes against that folder.
+
+## Checked Folder Scope
+
+1. Folder check/uncheck now writes only the explicit folder row in `checked_folders` (no recursive descendant rewrites on toggle).
+2. Force-random selection is now driven by checked folder scope rather than only the current folder.
+3. Random picks now use global random history/lap tables so non-repeating behavior remains app-wide and checkmark-agnostic.
 
 ## Notes on Compatibility
 
