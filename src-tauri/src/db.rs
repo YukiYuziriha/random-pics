@@ -397,3 +397,224 @@ pub fn get_db_path(app: &AppHandle) -> Result<PathBuf, Box<dyn std::error::Error
     std::fs::create_dir_all(&app_data_dir)?;
     Ok(app_data_dir.join("imgstate.sqlite"))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::Db;
+    use rusqlite::{params, Connection};
+    use std::path::PathBuf;
+    use std::sync::atomic::{AtomicU64, Ordering};
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    static TEST_COUNTER: AtomicU64 = AtomicU64::new(0);
+
+    fn unique_temp_db_path(name: &str) -> PathBuf {
+        let counter = TEST_COUNTER.fetch_add(1, Ordering::Relaxed);
+        let nanos = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_nanos();
+        std::env::temp_dir().join(format!(
+            "random_pics_{}_{}_{}_{}.sqlite",
+            name,
+            std::process::id(),
+            nanos,
+            counter
+        ))
+    }
+
+    #[test]
+    fn open_initializes_schema_and_state_row() {
+        let db_path = unique_temp_db_path("schema_init");
+        let db = Db::open(db_path.clone()).expect("db open should succeed");
+
+        let conn = db.conn();
+
+        let folders_table: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'folders'",
+                [],
+                |row| row.get(0),
+            )
+            .expect("folders table lookup should work");
+        assert_eq!(folders_table, 1);
+
+        let hidden_random_index: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM sqlite_master WHERE type = 'index' AND name = 'idx_hidden_random_folder'",
+                [],
+                |row| row.get(0),
+            )
+            .expect("hidden random index lookup should work");
+        assert_eq!(hidden_random_index, 1);
+
+        let state_row: i64 = conn
+            .query_row("SELECT COUNT(*) FROM state WHERE id = 1", [], |row| {
+                row.get(0)
+            })
+            .expect("state lookup should work");
+        assert_eq!(state_row, 1);
+
+        drop(conn);
+        std::fs::remove_file(db_path).expect("temp db should be removable");
+    }
+
+    #[test]
+    fn open_adds_missing_state_columns_via_migration() {
+        let db_path = unique_temp_db_path("state_migration");
+
+        let legacy = Connection::open(&db_path).expect("legacy db should open");
+        legacy
+            .execute_batch(
+                "
+                CREATE TABLE folders (
+                    id INTEGER PRIMARY KEY,
+                    path TEXT NOT NULL UNIQUE,
+                    added_at TEXT NOT NULL,
+                    current_index INTEGER NOT NULL DEFAULT -1,
+                    current_random_index INTEGER NOT NULL DEFAULT -1
+                );
+                CREATE TABLE images (
+                    id INTEGER PRIMARY KEY,
+                    path TEXT NOT NULL,
+                    folder_id INTEGER,
+                    FOREIGN KEY (folder_id) REFERENCES folders(id)
+                );
+                CREATE TABLE state (
+                    id INTEGER PRIMARY KEY CHECK (id = 1),
+                    current_index INTEGER NOT NULL DEFAULT -1,
+                    current_random_index INTEGER NOT NULL DEFAULT -1,
+                    current_folder_id INTEGER,
+                    vertical_mirror INTEGER NOT NULL DEFAULT 0,
+                    horizontal_mirror INTEGER NOT NULL DEFAULT 0,
+                    greyscale INTEGER NOT NULL DEFAULT 0
+                );
+                INSERT OR IGNORE INTO state (id) VALUES (1);
+                ",
+            )
+            .expect("legacy schema should be created");
+        drop(legacy);
+
+        let db = Db::open(db_path.clone()).expect("db open should migrate schema");
+        let conn = db.conn();
+
+        let timer_flow_mode_col: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM pragma_table_info('state') WHERE name = 'timer_flow_mode'",
+                [],
+                |row| row.get(0),
+            )
+            .expect("timer_flow_mode column lookup should work");
+        assert_eq!(timer_flow_mode_col, 1);
+
+        let shortcut_side_col: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM pragma_table_info('state') WHERE name = 'shortcut_hint_side'",
+                [],
+                |row| row.get(0),
+            )
+            .expect("shortcut_hint_side column lookup should work");
+        assert_eq!(shortcut_side_col, 1);
+
+        drop(conn);
+        std::fs::remove_file(db_path).expect("temp db should be removable");
+    }
+
+    #[test]
+    fn open_migrates_global_unique_image_path_to_folder_scoped_index() {
+        let db_path = unique_temp_db_path("images_unique_migration");
+
+        let legacy = Connection::open(&db_path).expect("legacy db should open");
+        legacy
+            .execute_batch(
+                "
+                CREATE TABLE folders (
+                    id INTEGER PRIMARY KEY,
+                    path TEXT NOT NULL UNIQUE,
+                    added_at TEXT NOT NULL,
+                    current_index INTEGER NOT NULL DEFAULT -1,
+                    current_random_index INTEGER NOT NULL DEFAULT -1
+                );
+                CREATE TABLE images (
+                    id INTEGER PRIMARY KEY,
+                    path TEXT NOT NULL UNIQUE,
+                    folder_id INTEGER,
+                    FOREIGN KEY (folder_id) REFERENCES folders(id)
+                );
+                CREATE TABLE state (
+                    id INTEGER PRIMARY KEY CHECK (id = 1),
+                    current_index INTEGER NOT NULL DEFAULT -1,
+                    current_random_index INTEGER NOT NULL DEFAULT -1,
+                    current_folder_id INTEGER,
+                    vertical_mirror INTEGER NOT NULL DEFAULT 0,
+                    horizontal_mirror INTEGER NOT NULL DEFAULT 0,
+                    greyscale INTEGER NOT NULL DEFAULT 0
+                );
+                INSERT OR IGNORE INTO state (id) VALUES (1);
+                ",
+            )
+            .expect("legacy schema should be created");
+        drop(legacy);
+
+        let db = Db::open(db_path.clone()).expect("db open should migrate unique index");
+        let conn = db.conn();
+
+        let global_unique_constraints: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM pragma_index_list('images') WHERE origin = 'u'",
+                [],
+                |row| row.get(0),
+            )
+            .expect("index list query should work");
+        assert_eq!(global_unique_constraints, 0);
+
+        conn.execute(
+            "INSERT INTO folders (path, added_at) VALUES (?1, ?2)",
+            params!["/tmp/folder-a", "now"],
+        )
+        .expect("folder-a insert should succeed");
+        conn.execute(
+            "INSERT INTO folders (path, added_at) VALUES (?1, ?2)",
+            params!["/tmp/folder-b", "now"],
+        )
+        .expect("folder-b insert should succeed");
+
+        let folder_a: i64 = conn
+            .query_row(
+                "SELECT id FROM folders WHERE path = ?1",
+                params!["/tmp/folder-a"],
+                |row| row.get(0),
+            )
+            .expect("folder-a id should exist");
+        let folder_b: i64 = conn
+            .query_row(
+                "SELECT id FROM folders WHERE path = ?1",
+                params!["/tmp/folder-b"],
+                |row| row.get(0),
+            )
+            .expect("folder-b id should exist");
+
+        conn.execute(
+            "INSERT INTO images (path, folder_id) VALUES (?1, ?2)",
+            params!["/tmp/shared-image.jpg", folder_a],
+        )
+        .expect("first image insert should succeed");
+        conn.execute(
+            "INSERT INTO images (path, folder_id) VALUES (?1, ?2)",
+            params!["/tmp/shared-image.jpg", folder_b],
+        )
+        .expect("same path in different folder should succeed");
+
+        let shared_count: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM images WHERE path = ?1",
+                params!["/tmp/shared-image.jpg"],
+                |row| row.get(0),
+            )
+            .expect("shared image count query should work");
+        assert_eq!(shared_count, 2);
+
+        drop(conn);
+        std::fs::remove_file(db_path).expect("temp db should be removable");
+    }
+}

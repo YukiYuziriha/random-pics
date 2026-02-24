@@ -38,8 +38,8 @@ impl ImageLoader {
             return Err("invalid folder path".into());
         }
 
-        let canonical = std::fs::canonicalize(Path::new(trimmed))
-            .map_err(|_| "invalid folder path")?;
+        let canonical =
+            std::fs::canonicalize(Path::new(trimmed)).map_err(|_| "invalid folder path")?;
 
         if !canonical.is_dir() {
             return Err("folder path is not a directory".into());
@@ -495,7 +495,7 @@ impl ImageLoader {
     fn delete_images_by_folder_id(&self, folder_id: i64) -> Result<(), Box<dyn std::error::Error>> {
         let mut conn = self.db.conn();
         let tx = conn.transaction()?;
-        
+
         // Must delete from dependent tables first due to FOREIGN KEY constraints
         tx.execute(
             "DELETE FROM hidden_normal_images WHERE folder_id = ?1",
@@ -517,7 +517,7 @@ impl ImageLoader {
             "DELETE FROM images WHERE folder_id = ?1",
             params![folder_id],
         )?;
-        
+
         tx.commit()?;
         Ok(())
     }
@@ -547,7 +547,7 @@ impl ImageLoader {
 
         let mut conn = self.db.conn();
         let tx = conn.transaction()?;
-        
+
         // Delete related records first
         tx.execute(
             "DELETE FROM hidden_normal_images WHERE folder_id = ?1",
@@ -557,11 +557,20 @@ impl ImageLoader {
             "DELETE FROM hidden_random_images WHERE folder_id = ?1",
             params![folder_id],
         )?;
-        tx.execute("DELETE FROM random_history WHERE folder_id = ?1", params![folder_id])?;
-        tx.execute("DELETE FROM current_lap WHERE folder_id = ?1", params![folder_id])?;
-        tx.execute("DELETE FROM images WHERE folder_id = ?1", params![folder_id])?;
+        tx.execute(
+            "DELETE FROM random_history WHERE folder_id = ?1",
+            params![folder_id],
+        )?;
+        tx.execute(
+            "DELETE FROM current_lap WHERE folder_id = ?1",
+            params![folder_id],
+        )?;
+        tx.execute(
+            "DELETE FROM images WHERE folder_id = ?1",
+            params![folder_id],
+        )?;
         tx.execute("DELETE FROM folders WHERE id = ?1", params![folder_id])?;
-        
+
         // If this was the current folder, fall back to previous history item
         if current_folder_id == Some(folder_id) {
             tx.execute(
@@ -569,7 +578,7 @@ impl ImageLoader {
                 params![fallback_folder_id],
             )?;
         }
-        
+
         tx.commit()?;
         Ok(())
     }
@@ -596,12 +605,13 @@ impl ImageLoader {
     {
         // First, check if current folder is valid and switch if needed
         let (folder_id, auto_switched) = self.ensure_valid_current_folder(&mut on_progress)?;
-        
+
         // Now index the valid folder
-        self.index_folder_with_progress(folder_id, &mut on_progress, force_rescan).await?;
+        self.index_folder_with_progress(folder_id, &mut on_progress, force_rescan)
+            .await?;
         Ok((folder_id, auto_switched))
     }
-    
+
     /// Ensures we have a valid current folder, switching to another if needed.
     /// Returns (folder_id, auto_switched) where auto_switched is true if a
     /// deleted folder was detected and we fell back to another one.
@@ -621,10 +631,10 @@ impl ImageLoader {
             on_progress(format!("folder deleted: {}", folder_path));
             self.delete_folder_by_id(folder_id)?;
         }
-        
+
         // Try to find another valid folder from history
         let history = self.get_folder_history()?;
-        
+
         if history.is_empty() {
             return Err("no folders available - pick a folder first".into());
         }
@@ -643,7 +653,7 @@ impl ImageLoader {
 
         Err("all folders in history have been deleted - pick a folder first".into())
     }
-    
+
     /// Indexes a specific folder (internal method)
     async fn index_folder_with_progress<F>(
         &self,
@@ -697,9 +707,8 @@ impl ImageLoader {
             let tx = conn.transaction()?;
             {
                 let total = paths.len();
-                let mut stmt = tx.prepare(
-                    "INSERT OR IGNORE INTO images (path, folder_id) VALUES (?1, ?2)",
-                )?;
+                let mut stmt =
+                    tx.prepare("INSERT OR IGNORE INTO images (path, folder_id) VALUES (?1, ?2)")?;
                 for (i, path) in paths.iter().enumerate() {
                     stmt.execute(params![path, folder_id])?;
                     let done = i + 1;
@@ -724,7 +733,8 @@ impl ImageLoader {
 
     /// Returns (folder_id, auto_switched)
     pub async fn ensure_images_indexed(&self) -> Result<(i64, bool), Box<dyn std::error::Error>> {
-        self.ensure_images_indexed_with_progress(|_| {}, false).await
+        self.ensure_images_indexed_with_progress(|_| {}, false)
+            .await
     }
 
     pub async fn set_current_folder_and_index(
@@ -745,7 +755,9 @@ impl ImageLoader {
         F: FnMut(String),
     {
         let (_id, canonical_path) = self.set_current_folder_by_path(path)?;
-        let (folder_id, _) = self.ensure_images_indexed_with_progress(on_progress, false).await?;
+        let (folder_id, _) = self
+            .ensure_images_indexed_with_progress(on_progress, false)
+            .await?;
         Ok((folder_id, canonical_path))
     }
 
@@ -770,7 +782,7 @@ impl ImageLoader {
     fn delete_image_by_id(&self, image_id: i64) -> Result<(), Box<dyn std::error::Error>> {
         let mut conn = self.db.conn();
         let tx = conn.transaction()?;
-        
+
         tx.execute(
             "DELETE FROM hidden_normal_images WHERE image_id = ?1",
             params![image_id],
@@ -785,13 +797,10 @@ impl ImageLoader {
             "DELETE FROM random_history WHERE image_id = ?1",
             params![image_id],
         )?;
-        
+
         // Then delete the image
-        tx.execute(
-            "DELETE FROM images WHERE id = ?1",
-            params![image_id],
-        )?;
-        
+        tx.execute("DELETE FROM images WHERE id = ?1", params![image_id])?;
+
         tx.commit()?;
         Ok(())
     }
@@ -843,7 +852,9 @@ impl ImageLoader {
         Ok((data, auto_switched))
     }
 
-    pub async fn get_current_image_or_first(&self) -> Result<(Vec<u8>, bool), Box<dyn std::error::Error>> {
+    pub async fn get_current_image_or_first(
+        &self,
+    ) -> Result<(Vec<u8>, bool), Box<dyn std::error::Error>> {
         let (folder_id, auto_switched) = self.ensure_images_indexed().await?;
         let visible = self.get_visible_normal_entries(folder_id)?;
         if visible.is_empty() {
@@ -862,7 +873,9 @@ impl ImageLoader {
         Ok((data, auto_switched))
     }
 
-    pub async fn get_current_random_image_or_last(&self) -> Result<(Vec<u8>, bool), Box<dyn std::error::Error>> {
+    pub async fn get_current_random_image_or_last(
+        &self,
+    ) -> Result<(Vec<u8>, bool), Box<dyn std::error::Error>> {
         let (folder_id, auto_switched) = self.ensure_images_indexed().await?;
         if self.random_history_count(folder_id)? == 0 {
             return self.get_force_random_image(true).await;
@@ -903,46 +916,58 @@ impl ImageLoader {
             let mut rng = rand::thread_rng();
             let mut attempts = 0;
             let max_attempts = image_ids.len() * 3; // Increased attempts to handle stale images
-            
+
             loop {
                 if image_ids.is_empty() {
                     if skipped_count > 0 {
-                        return Err(format!("all images were deleted ({} found) - reindex please", skipped_count).into());
+                        return Err(format!(
+                            "all images were deleted ({} found) - reindex please",
+                            skipped_count
+                        )
+                        .into());
                     }
                     return Err("no images available".into());
                 }
-                
+
                 if attempts >= max_attempts {
                     // Check if all remaining images are in the current lap
-                    let all_in_lap = image_ids.iter().all(|&id| {
-                        self.lap_has(folder_id, id).unwrap_or(false)
-                    });
-                    
+                    let all_in_lap = image_ids
+                        .iter()
+                        .all(|&id| self.lap_has(folder_id, id).unwrap_or(false));
+
                     if all_in_lap {
                         // Lap is full, clear it and try again
                         self.lap_clear(folder_id)?;
                         attempts = 0;
                         continue;
                     }
-                    
+
                     if skipped_count > 0 {
-                        return Err(format!("skipped {} deleted image(s), no valid images found - reindex please", skipped_count).into());
+                        return Err(format!(
+                            "skipped {} deleted image(s), no valid images found - reindex please",
+                            skipped_count
+                        )
+                        .into());
                     }
                     return Err("no images available".into());
                 }
-                
+
                 attempts += 1;
-                
+
                 let candidate = match image_ids.choose(&mut rng) {
                     Some(&id) => id,
                     None => {
                         if skipped_count > 0 {
-                            return Err(format!("skipped {} deleted image(s) - reindex please", skipped_count).into());
+                            return Err(format!(
+                                "skipped {} deleted image(s) - reindex please",
+                                skipped_count
+                            )
+                            .into());
                         }
                         return Err("no images available".into());
                     }
                 };
-                
+
                 // Check if image file actually exists
                 let path = match self.get_image_path(candidate) {
                     Ok(p) => p,
@@ -952,7 +977,7 @@ impl ImageLoader {
                         continue;
                     }
                 };
-                
+
                 if !std::path::Path::new(&path).exists() {
                     // Image was deleted from disk, remove it from DB and continue
                     self.delete_image_by_id(candidate)?;
@@ -960,7 +985,7 @@ impl ImageLoader {
                     image_ids = self.get_visible_random_image_ids(folder_id)?;
                     continue;
                 }
-                
+
                 if !self.lap_has(folder_id, candidate)? {
                     self.lap_insert(folder_id, candidate)?;
                     break candidate;
@@ -975,11 +1000,15 @@ impl ImageLoader {
         };
 
         self.set_current_folder_random_index(folder_id, next_index)?;
-        
+
         match self.load_by_image_id(image_id).await {
             Ok(data) => {
                 if skipped_count > 0 {
-                    return Err(format!("skipped {} deleted image(s) - reindex please", skipped_count).into());
+                    return Err(format!(
+                        "skipped {} deleted image(s) - reindex please",
+                        skipped_count
+                    )
+                    .into());
                 }
                 Ok((data, auto_switched))
             }
@@ -989,7 +1018,11 @@ impl ImageLoader {
                 if error_str.contains("not found") || error_str.contains("reindex") {
                     self.delete_image_by_id(image_id)?;
                     if skipped_count > 0 {
-                        return Err(format!("skipped {} deleted image(s) - reindex please", skipped_count + 1).into());
+                        return Err(format!(
+                            "skipped {} deleted image(s) - reindex please",
+                            skipped_count + 1
+                        )
+                        .into());
                     }
                     return Err("deleted image found - reindex please".into());
                 }
@@ -998,7 +1031,9 @@ impl ImageLoader {
         }
     }
 
-    pub async fn get_next_random_image(&self) -> Result<(Vec<u8>, bool), Box<dyn std::error::Error>> {
+    pub async fn get_next_random_image(
+        &self,
+    ) -> Result<(Vec<u8>, bool), Box<dyn std::error::Error>> {
         let (folder_id, auto_switched) = self.ensure_images_indexed().await?;
         if self.random_history_count(folder_id)? == 0 {
             return self.get_force_random_image(true).await;
@@ -1023,7 +1058,9 @@ impl ImageLoader {
         self.get_force_random_image(true).await
     }
 
-    pub async fn get_prev_random_image(&self) -> Result<(Vec<u8>, bool), Box<dyn std::error::Error>> {
+    pub async fn get_prev_random_image(
+        &self,
+    ) -> Result<(Vec<u8>, bool), Box<dyn std::error::Error>> {
         let (folder_id, auto_switched) = self.ensure_images_indexed().await?;
         if self.random_history_count(folder_id)? == 0 {
             return self.get_force_random_image(false).await;
@@ -1049,7 +1086,11 @@ impl ImageLoader {
         self.get_force_random_image(false).await
     }
 
-    fn delete_image_from_random_history(&self, folder_id: i64, image_id: i64) -> Result<(), Box<dyn std::error::Error>> {
+    fn delete_image_from_random_history(
+        &self,
+        folder_id: i64,
+        image_id: i64,
+    ) -> Result<(), Box<dyn std::error::Error>> {
         self.db.conn().execute(
             "DELETE FROM random_history WHERE folder_id = ?1 AND image_id = ?2",
             params![folder_id, image_id],
@@ -1074,11 +1115,13 @@ impl ImageLoader {
             .unwrap_or(-1);
         let items = visible
             .into_iter()
-            .map(|(order_index, image_id, path)| crate::commands::ImageHistoryItem {
-                image_id,
-                order_index,
-                path,
-            })
+            .map(
+                |(order_index, image_id, path)| crate::commands::ImageHistoryItem {
+                    image_id,
+                    order_index,
+                    path,
+                },
+            )
             .collect::<Vec<_>>();
         Ok((items, pointer))
     }
@@ -1100,11 +1143,13 @@ impl ImageLoader {
             .unwrap_or(-1);
         let items = visible
             .into_iter()
-            .map(|(order_index, image_id, path)| crate::commands::ImageHistoryItem {
-                image_id,
-                order_index,
-                path,
-            })
+            .map(
+                |(order_index, image_id, path)| crate::commands::ImageHistoryItem {
+                    image_id,
+                    order_index,
+                    path,
+                },
+            )
             .collect::<Vec<_>>();
         Ok((items, pointer))
     }
@@ -1267,7 +1312,7 @@ impl ImageLoader {
         for i in 0..history.len() {
             let try_idx = (start_idx + i) % history.len();
             let (folder_id, folder_path, _, _) = &history[try_idx];
-            
+
             if std::path::Path::new(folder_path).exists() {
                 self.set_current_folder_id(Some(*folder_id))?;
                 return Ok(Some((*folder_id, folder_path.clone())));
@@ -1336,14 +1381,19 @@ impl ImageLoader {
         if !std::path::Path::new(&folder_path).exists() {
             // Delete the stale folder entry and its related data
             self.delete_folder_by_id(folder_id)?;
-            return Err(format!("folder no longer exists: {} - deleted from history", folder_path).into());
+            return Err(format!(
+                "folder no longer exists: {} - deleted from history",
+                folder_path
+            )
+            .into());
         }
 
         self.delete_images_by_folder_id(folder_id)?;
         self.clear_hidden_images_for_folder(folder_id)?;
         self.set_current_folder_index(folder_id, -1)?;
         self.set_current_folder_random_index(folder_id, -1)?;
-        self.ensure_images_indexed_with_progress(|_| {}, true).await?;
+        self.ensure_images_indexed_with_progress(|_| {}, true)
+            .await?;
         Ok((folder_id, folder_path))
     }
 
@@ -1363,14 +1413,19 @@ impl ImageLoader {
         if !std::path::Path::new(&folder_path).exists() {
             // Delete the stale folder entry and its related data
             self.delete_folder_by_id(folder_id)?;
-            return Err(format!("folder no longer exists: {} - deleted from history", folder_path).into());
+            return Err(format!(
+                "folder no longer exists: {} - deleted from history",
+                folder_path
+            )
+            .into());
         }
 
         self.delete_images_by_folder_id(folder_id)?;
         self.clear_hidden_images_for_folder(folder_id)?;
         self.set_current_folder_index(folder_id, -1)?;
         self.set_current_folder_random_index(folder_id, -1)?;
-        self.ensure_images_indexed_with_progress(on_progress, true).await?;
+        self.ensure_images_indexed_with_progress(on_progress, true)
+            .await?;
         Ok((folder_id, folder_path))
     }
 
@@ -1430,7 +1485,11 @@ impl ImageLoader {
             show_bottom_controls: row.7 != 0,
             is_fullscreen_image: row.8 != 0,
             shortcut_hints_visible: row.9 != 0,
-            shortcut_hint_side: if row.10 == "right" { "right".to_string() } else { "left".to_string() },
+            shortcut_hint_side: if row.10 == "right" {
+                "right".to_string()
+            } else {
+                "left".to_string()
+            },
         })
     }
 
@@ -1535,5 +1594,251 @@ impl ImageLoader {
         self.set_current_folder_random_index(folder_id, order_index)?;
         let data = self.load_by_image_id(image_id).await?;
         Ok((data, auto_switched))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::ImageLoader;
+    use crate::db::Db;
+    use rusqlite::params;
+    use std::path::{Path, PathBuf};
+    use std::sync::atomic::{AtomicU64, Ordering};
+    use std::time::{SystemTime, UNIX_EPOCH};
+    use tauri::async_runtime::block_on;
+
+    static TEST_COUNTER: AtomicU64 = AtomicU64::new(0);
+
+    fn unique_temp_root(name: &str) -> PathBuf {
+        let counter = TEST_COUNTER.fetch_add(1, Ordering::Relaxed);
+        let nanos = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_nanos();
+        let root = std::env::temp_dir().join(format!(
+            "random_pics_img_loader_{}_{}_{}_{}",
+            name,
+            std::process::id(),
+            nanos,
+            counter
+        ));
+        std::fs::create_dir_all(&root).expect("test temp root should be created");
+        root
+    }
+
+    fn write_test_image(path: &Path, seed: u8) {
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent).expect("image parent should exist");
+        }
+        std::fs::write(path, [seed, seed.wrapping_add(1), seed.wrapping_add(2)])
+            .expect("test image should be writable");
+    }
+
+    fn setup_loader_with_images(name: &str, image_count: usize) -> (ImageLoader, PathBuf) {
+        let root = unique_temp_root(name);
+        let folder = root.join("images");
+        std::fs::create_dir_all(&folder).expect("image folder should be created");
+
+        for idx in 0..image_count {
+            let path = if idx % 2 == 0 {
+                folder.join(format!("img_{idx}.jpg"))
+            } else {
+                folder.join("nested").join(format!("img_{idx}.png"))
+            };
+            write_test_image(&path, idx as u8);
+        }
+
+        let db_path = root.join("imgstate.sqlite");
+        let db = Db::open(db_path).expect("db open should succeed");
+        let loader = ImageLoader::new(db);
+        let folder_str = folder.to_string_lossy().to_string();
+        block_on(loader.set_current_folder_and_index(&folder_str))
+            .expect("folder should index successfully");
+
+        (loader, root)
+    }
+
+    #[test]
+    fn force_random_errors_when_all_images_are_hidden_in_random_mode() {
+        let (loader, root) = setup_loader_with_images("all_hidden_random", 3);
+        let folder_id = loader
+            .get_current_folder_id()
+            .expect("folder lookup should succeed")
+            .expect("current folder should be set");
+
+        {
+            let conn = loader.db.conn();
+            let mut stmt = conn
+                .prepare("SELECT id FROM images WHERE folder_id = ?1")
+                .expect("image id query should prepare");
+            let image_ids = stmt
+                .query_map(params![folder_id], |row| row.get::<_, i64>(0))
+                .expect("image id query should run")
+                .collect::<Result<Vec<_>, _>>()
+                .expect("image ids should collect");
+
+            for image_id in image_ids {
+                conn.execute(
+                    "INSERT OR IGNORE INTO hidden_random_images (folder_id, image_id) VALUES (?1, ?2)",
+                    params![folder_id, image_id],
+                )
+                .expect("hidden_random insert should succeed");
+            }
+        }
+
+        let err = block_on(loader.get_force_random_image(true))
+            .expect_err("force random should fail when all images are hidden")
+            .to_string();
+        assert!(err.contains("all images for this folder are hidden in random mode"));
+
+        drop(loader);
+        std::fs::remove_dir_all(root).expect("temp root should be removable");
+    }
+
+    #[test]
+    fn reset_random_history_clears_history_but_preserves_hidden_random_blacklist() {
+        let (loader, root) = setup_loader_with_images("reset_preserves_hidden", 4);
+        block_on(loader.get_force_random_image(true)).expect("initial random image should load");
+        block_on(loader.get_force_random_image(true)).expect("second random image should load");
+
+        let (history, _) = loader
+            .get_random_history()
+            .expect("random history should be readable");
+        assert!(!history.is_empty());
+        let hidden_image_id = history[0].image_id;
+
+        loader
+            .hide_random_history_image(hidden_image_id)
+            .expect("hiding random image should succeed");
+        loader
+            .reset_random_history()
+            .expect("reset random history should succeed");
+
+        let (history_after, current_after) = loader
+            .get_random_history()
+            .expect("random history should be readable after reset");
+        assert!(history_after.is_empty());
+        assert_eq!(current_after, -1);
+
+        let folder_id = loader
+            .get_current_folder_id()
+            .expect("folder lookup should succeed")
+            .expect("current folder should exist");
+        let hidden_count: i64 = loader
+            .db
+            .conn()
+            .query_row(
+                "SELECT COUNT(*) FROM hidden_random_images WHERE folder_id = ?1",
+                params![folder_id],
+                |row| row.get(0),
+            )
+            .expect("hidden random count query should work");
+        assert_eq!(hidden_count, 1);
+
+        drop(loader);
+        std::fs::remove_dir_all(root).expect("temp root should be removable");
+    }
+
+    #[test]
+    fn hide_random_history_image_keeps_pointer_on_a_visible_entry() {
+        let (loader, root) = setup_loader_with_images("hide_pointer", 5);
+        block_on(loader.get_force_random_image(true)).expect("random image load should work");
+        block_on(loader.get_force_random_image(true)).expect("random image load should work");
+        block_on(loader.get_force_random_image(true)).expect("random image load should work");
+
+        let (before, before_index) = loader
+            .get_random_history()
+            .expect("random history should be readable");
+        assert!(before.len() >= 2);
+        assert!(before_index >= 0);
+        let current_image_id = before[before_index as usize].image_id;
+
+        loader
+            .hide_random_history_image(current_image_id)
+            .expect("hiding current random image should succeed");
+
+        let (after, after_index) = loader
+            .get_random_history()
+            .expect("random history should be readable after hide");
+
+        assert!(after.iter().all(|item| item.image_id != current_image_id));
+        assert!(!after.is_empty());
+        assert!(after_index >= 0);
+        assert!((after_index as usize) < after.len());
+
+        drop(loader);
+        std::fs::remove_dir_all(root).expect("temp root should be removable");
+    }
+
+    #[test]
+    fn delete_folder_cleans_related_rows_and_clears_current_folder_state() {
+        let (loader, root) = setup_loader_with_images("delete_folder_cleanup", 4);
+        block_on(loader.get_force_random_image(true)).expect("random image load should work");
+        block_on(loader.get_force_random_image(true))
+            .expect("second random image load should work");
+
+        let (random_history, _) = loader
+            .get_random_history()
+            .expect("random history should be readable");
+        assert!(!random_history.is_empty());
+        let image_id = random_history[0].image_id;
+
+        loader
+            .hide_normal_history_image(image_id)
+            .expect("hiding normal history image should work");
+        loader
+            .hide_random_history_image(image_id)
+            .expect("hiding random history image should work");
+
+        let folder_id = loader
+            .get_current_folder_id()
+            .expect("folder lookup should succeed")
+            .expect("current folder should be set");
+        loader
+            .delete_folder_by_id(folder_id)
+            .expect("deleting folder should succeed");
+
+        let conn = loader.db.conn();
+        let folders_count: i64 = conn
+            .query_row("SELECT COUNT(*) FROM folders", [], |row| row.get(0))
+            .expect("folders count query should work");
+        let images_count: i64 = conn
+            .query_row("SELECT COUNT(*) FROM images", [], |row| row.get(0))
+            .expect("images count query should work");
+        let random_history_count: i64 = conn
+            .query_row("SELECT COUNT(*) FROM random_history", [], |row| row.get(0))
+            .expect("random history count query should work");
+        let current_lap_count: i64 = conn
+            .query_row("SELECT COUNT(*) FROM current_lap", [], |row| row.get(0))
+            .expect("current lap count query should work");
+        let hidden_normal_count: i64 = conn
+            .query_row("SELECT COUNT(*) FROM hidden_normal_images", [], |row| {
+                row.get(0)
+            })
+            .expect("hidden normal count query should work");
+        let hidden_random_count: i64 = conn
+            .query_row("SELECT COUNT(*) FROM hidden_random_images", [], |row| {
+                row.get(0)
+            })
+            .expect("hidden random count query should work");
+        let current_folder_id: Option<i64> = conn
+            .query_row(
+                "SELECT current_folder_id FROM state WHERE id = 1",
+                [],
+                |row| row.get(0),
+            )
+            .expect("current folder state query should work");
+
+        assert_eq!(folders_count, 0);
+        assert_eq!(images_count, 0);
+        assert_eq!(random_history_count, 0);
+        assert_eq!(current_lap_count, 0);
+        assert_eq!(hidden_normal_count, 0);
+        assert_eq!(hidden_random_count, 0);
+        assert_eq!(current_folder_id, None);
+
+        drop(conn);
+        drop(loader);
+        std::fs::remove_dir_all(root).expect("temp root should be removable");
     }
 }

@@ -38,9 +38,19 @@ What this does:
 - does not require localhost HTTP API
 
 ## typecheck / test
-This project currently uses TypeScript typecheck as the main validation step:
+Typecheck:
 ```bash
 bun tsc
+```
+
+Rust backend regression tests:
+```bash
+bun run test
+```
+
+CI-style validation (Rust tests + TypeScript typecheck):
+```bash
+bun run test:ci
 ```
 
 ## build app package
