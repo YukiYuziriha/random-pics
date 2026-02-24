@@ -43,6 +43,16 @@ pub struct FolderHistory {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
+pub struct FolderTreeNode {
+    pub path: String,
+    #[serde(rename = "parentPath")]
+    pub parent_path: Option<String>,
+    #[serde(rename = "imageCount")]
+    pub image_count: i64,
+    pub checked: bool,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
 pub struct ImageState {
     #[serde(rename = "verticalMirror")]
     pub vertical_mirror: bool,
@@ -123,8 +133,49 @@ fn sanitize_error_message(raw: &str) -> String {
         return "all images are hidden for this folder and mode - reindex to clear hidden images"
             .to_string();
     }
+    if raw.contains("No folders selected. Check at least one folder.") {
+        return "No folders selected. Check at least one folder.".to_string();
+    }
     // Pass through all other errors as-is
     raw.to_string()
+}
+
+#[tauri::command]
+pub async fn get_folder_tree(
+    state: State<'_, ImageLoaderState>,
+) -> Result<Vec<FolderTreeNode>, CommandError> {
+    let loader = get_loader(&state)?;
+    let nodes = loader.get_folder_tree()?;
+    Ok(nodes
+        .into_iter()
+        .map(|(path, parent_path, image_count, checked)| FolderTreeNode {
+            path,
+            parent_path,
+            image_count,
+            checked,
+        })
+        .collect())
+}
+
+#[tauri::command]
+pub async fn set_folder_checked(
+    path: String,
+    checked: bool,
+    state: State<'_, ImageLoaderState>,
+) -> Result<(), CommandError> {
+    let loader = get_loader(&state)?;
+    loader.set_folder_checked(&path, checked)?;
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn set_folder_exclusive(
+    path: String,
+    state: State<'_, ImageLoaderState>,
+) -> Result<(), CommandError> {
+    let loader = get_loader(&state)?;
+    loader.set_folder_exclusive(&path)?;
+    Ok(())
 }
 
 fn get_loader(state: &State<ImageLoaderState>) -> Result<Arc<ImageLoader>, CommandError> {

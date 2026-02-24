@@ -9,6 +9,45 @@ const dbPath = runtimeDataDir
 mkdirSync(dirname(dbPath), { recursive: true });
 export const db = new Database(dbPath, { create: true, readwrite: true });
 
+const APP_DB_VERSION = "1.1.0";
+
+db.run(`
+  CREATE TABLE IF NOT EXISTS app_meta (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL
+  );
+`);
+
+const currentVersionRow = db
+  .query("SELECT value FROM app_meta WHERE key = 'db_version' LIMIT 1")
+  .get() as { value: string } | null;
+
+const hasLegacyTables =
+  Number(
+    (
+      db
+        .query(
+          "SELECT COUNT(*) AS cnt FROM sqlite_master WHERE type = 'table' AND name IN ('folders','images','state','random_history','current_lap','hidden_normal_images','hidden_random_images','folder_nodes','checked_folders','active_images')",
+        )
+        .get() as { cnt: number } | null
+    )?.cnt ?? 0,
+  ) > 0;
+
+if ((currentVersionRow?.value ?? "") !== APP_DB_VERSION && hasLegacyTables) {
+  db.run("DROP TABLE IF EXISTS random_history");
+  db.run("DROP TABLE IF EXISTS random_history_global");
+  db.run("DROP TABLE IF EXISTS current_lap");
+  db.run("DROP TABLE IF EXISTS current_lap_global");
+  db.run("DROP TABLE IF EXISTS hidden_normal_images");
+  db.run("DROP TABLE IF EXISTS hidden_random_images");
+  db.run("DROP TABLE IF EXISTS active_images");
+  db.run("DROP TABLE IF EXISTS checked_folders");
+  db.run("DROP TABLE IF EXISTS folder_nodes");
+  db.run("DROP TABLE IF EXISTS images");
+  db.run("DROP TABLE IF EXISTS folders");
+  db.run("DROP TABLE IF EXISTS state");
+}
+
 db.run(`
   CREATE TABLE IF NOT EXISTS folders (
     id INTEGER PRIMARY KEY,
@@ -73,3 +112,8 @@ ensureStateColumn("show_image_history_panel", "show_image_history_panel INTEGER 
 ensureStateColumn("show_bottom_controls", "show_bottom_controls INTEGER NOT NULL DEFAULT 1");
 ensureStateColumn("is_fullscreen_image", "is_fullscreen_image INTEGER NOT NULL DEFAULT 0");
 ensureStateColumn("last_image_id", "last_image_id INTEGER");
+
+db.run(
+  "INSERT INTO app_meta(key, value) VALUES('db_version', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+  [APP_DB_VERSION],
+);

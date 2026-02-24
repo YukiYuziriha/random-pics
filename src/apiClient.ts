@@ -34,6 +34,13 @@ export type FolderHistoryItem = {
   imageCount: number;
 };
 
+export type FolderTreeNode = {
+  path: string;
+  parentPath: string | null;
+  imageCount: number;
+  checked: boolean;
+};
+
 export type ImageState = {
   verticalMirror: boolean;
   horizontalMirror: boolean;
@@ -63,6 +70,18 @@ export async function getPrevFolder(): Promise<FolderInfo | null> {
 
 export async function getFolderHistory(): Promise<FolderHistory> {
   return await invoke('get_folder_history');
+}
+
+export async function getFolderTree(): Promise<FolderTreeNode[]> {
+  return await invoke('get_folder_tree');
+}
+
+export async function setFolderChecked(path: string, checked: boolean): Promise<void> {
+  await invoke('set_folder_checked', { path, checked });
+}
+
+export async function setFolderExclusive(path: string): Promise<void> {
+  await invoke('set_folder_exclusive', { path });
 }
 
 export async function reindexCurrentFolder(): Promise<FolderInfo> {

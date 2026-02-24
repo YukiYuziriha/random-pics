@@ -7,6 +7,8 @@ pub struct Db {
     conn: Arc<std::sync::Mutex<Connection>>,
 }
 
+const APP_DB_VERSION: &str = "1.1.0";
+
 impl Db {
     pub fn open(db_path: PathBuf) -> Result<Self> {
         eprintln!("[RUST] Db::open: opening database at {}", db_path.display());
@@ -14,10 +16,139 @@ impl Db {
         let db = Db {
             conn: Arc::new(std::sync::Mutex::new(conn)),
         };
+        db.ensure_meta_table()?;
+        db.wipe_legacy_db_if_needed()?;
         db.init_schema()?;
         db.run_migrations()?;
+        db.set_db_version(APP_DB_VERSION)?;
         eprintln!("[RUST] Db::open: database opened successfully");
         Ok(db)
+    }
+
+    fn ensure_meta_table(&self) -> Result<()> {
+        self.execute(
+            "CREATE TABLE IF NOT EXISTS app_meta (
+                key TEXT PRIMARY KEY,
+                value TEXT NOT NULL
+            )",
+            rusqlite::params![],
+        )?;
+        Ok(())
+    }
+
+    fn get_db_version(&self) -> Result<Option<String>> {
+        let conn = self.conn();
+        let mut stmt =
+            conn.prepare("SELECT value FROM app_meta WHERE key = 'db_version' LIMIT 1")?;
+        let mut rows = stmt.query(rusqlite::params![])?;
+        if let Some(row) = rows.next()? {
+            let value: String = row.get(0)?;
+            return Ok(Some(value));
+        }
+        Ok(None)
+    }
+
+    fn has_legacy_tables(&self) -> Result<bool> {
+        let count: i64 = self.query_row(
+            "SELECT COUNT(*)
+             FROM sqlite_master
+             WHERE type = 'table'
+               AND name IN (
+                 'folders',
+                 'images',
+                 'state',
+                 'random_history',
+                 'current_lap',
+                 'hidden_normal_images',
+                 'hidden_random_images',
+                 'folder_nodes',
+                 'checked_folders',
+                 'active_images'
+               )",
+            rusqlite::params![],
+            |row| row.get(0),
+        )?;
+        Ok(count > 0)
+    }
+
+    fn has_required_tables_for_current_version(&self) -> Result<bool> {
+        let count: i64 = self.query_row(
+            "SELECT COUNT(*)
+             FROM sqlite_master
+             WHERE type = 'table'
+               AND name IN (
+                 'app_meta',
+                 'folders',
+                 'images',
+                 'state',
+                 'random_history',
+                 'current_lap',
+                 'hidden_normal_images',
+                 'hidden_random_images',
+                 'folder_nodes',
+                 'checked_folders',
+                 'active_images',
+                 'active_image_refcounts',
+                 'folder_closure',
+                 'folder_images_direct',
+                 'random_history_global',
+                 'current_lap_global'
+               )",
+            rusqlite::params![],
+            |row| row.get(0),
+        )?;
+        Ok(count == 16)
+    }
+
+    fn wipe_legacy_db_if_needed(&self) -> Result<()> {
+        let version = self.get_db_version()?;
+        let schema_ok = self.has_required_tables_for_current_version()?;
+        if version.as_deref() == Some(APP_DB_VERSION) && schema_ok {
+            return Ok(());
+        }
+        if !self.has_legacy_tables()? {
+            return Ok(());
+        }
+
+        let mut conn = self.conn();
+        conn.execute("PRAGMA foreign_keys = OFF", rusqlite::params![])?;
+        let tx = conn.transaction()?;
+        tx.execute("DROP TABLE IF EXISTS random_history", rusqlite::params![])?;
+        tx.execute(
+            "DROP TABLE IF EXISTS random_history_global",
+            rusqlite::params![],
+        )?;
+        tx.execute("DROP TABLE IF EXISTS current_lap", rusqlite::params![])?;
+        tx.execute(
+            "DROP TABLE IF EXISTS current_lap_global",
+            rusqlite::params![],
+        )?;
+        tx.execute(
+            "DROP TABLE IF EXISTS hidden_normal_images",
+            rusqlite::params![],
+        )?;
+        tx.execute(
+            "DROP TABLE IF EXISTS hidden_random_images",
+            rusqlite::params![],
+        )?;
+        tx.execute("DROP TABLE IF EXISTS active_images", rusqlite::params![])?;
+        tx.execute("DROP TABLE IF EXISTS checked_folders", rusqlite::params![])?;
+        tx.execute("DROP TABLE IF EXISTS folder_nodes", rusqlite::params![])?;
+        tx.execute("DROP TABLE IF EXISTS images", rusqlite::params![])?;
+        tx.execute("DROP TABLE IF EXISTS folders", rusqlite::params![])?;
+        tx.execute("DROP TABLE IF EXISTS state", rusqlite::params![])?;
+        tx.commit()?;
+        conn.execute("PRAGMA foreign_keys = ON", rusqlite::params![])?;
+        Ok(())
+    }
+
+    fn set_db_version(&self, version: &str) -> Result<()> {
+        self.execute(
+            "INSERT INTO app_meta(key, value) VALUES('db_version', ?1)
+             ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+            rusqlite::params![version],
+        )?;
+        Ok(())
     }
 
     fn execute<P: rusqlite::Params>(&self, sql: &str, params: P) -> Result<usize> {
@@ -121,6 +252,7 @@ impl Db {
         )?;
 
         self.ensure_hidden_tables_and_indexes()?;
+        self.ensure_selection_tables_and_indexes()?;
 
         self.execute(
             "INSERT OR IGNORE INTO state (id) VALUES (1)",
@@ -143,6 +275,7 @@ impl Db {
         self.ensure_state_column("shortcut_hints_visible", "INTEGER NOT NULL DEFAULT 0")?;
         self.ensure_state_column("shortcut_hint_side", "TEXT NOT NULL DEFAULT 'left'")?;
         self.ensure_hidden_tables_and_indexes()?;
+        self.ensure_selection_tables_and_indexes()?;
         Ok(())
     }
 
@@ -371,6 +504,102 @@ impl Db {
         Ok(())
     }
 
+    fn ensure_selection_tables_and_indexes(&self) -> Result<()> {
+        self.execute(
+            "CREATE TABLE IF NOT EXISTS folder_nodes (
+                path TEXT PRIMARY KEY,
+                parent_path TEXT,
+                root_folder_id INTEGER NOT NULL,
+                subtree_image_count INTEGER NOT NULL DEFAULT 0,
+                FOREIGN KEY (root_folder_id) REFERENCES folders(id)
+            )",
+            rusqlite::params![],
+        )?;
+        self.execute(
+            "CREATE INDEX IF NOT EXISTS idx_folder_nodes_parent_path ON folder_nodes(parent_path)",
+            rusqlite::params![],
+        )?;
+        self.execute(
+            "CREATE INDEX IF NOT EXISTS idx_folder_nodes_root_folder_id ON folder_nodes(root_folder_id)",
+            rusqlite::params![],
+        )?;
+
+        self.execute(
+            "CREATE TABLE IF NOT EXISTS checked_folders (
+                path TEXT PRIMARY KEY,
+                FOREIGN KEY (path) REFERENCES folder_nodes(path)
+            )",
+            rusqlite::params![],
+        )?;
+
+        self.execute(
+            "CREATE TABLE IF NOT EXISTS active_images (
+                image_id INTEGER PRIMARY KEY,
+                FOREIGN KEY (image_id) REFERENCES images(id)
+            )",
+            rusqlite::params![],
+        )?;
+        self.execute(
+            "CREATE TABLE IF NOT EXISTS active_image_refcounts (
+                image_id INTEGER PRIMARY KEY,
+                refcount INTEGER NOT NULL,
+                FOREIGN KEY (image_id) REFERENCES images(id)
+            )",
+            rusqlite::params![],
+        )?;
+        self.execute(
+            "CREATE TABLE IF NOT EXISTS folder_closure (
+                ancestor_path TEXT NOT NULL,
+                descendant_path TEXT NOT NULL,
+                PRIMARY KEY (ancestor_path, descendant_path),
+                FOREIGN KEY (ancestor_path) REFERENCES folder_nodes(path),
+                FOREIGN KEY (descendant_path) REFERENCES folder_nodes(path)
+            )",
+            rusqlite::params![],
+        )?;
+        self.execute(
+            "CREATE INDEX IF NOT EXISTS idx_folder_closure_descendant ON folder_closure(descendant_path)",
+            rusqlite::params![],
+        )?;
+        self.execute(
+            "CREATE TABLE IF NOT EXISTS folder_images_direct (
+                folder_path TEXT NOT NULL,
+                image_id INTEGER NOT NULL,
+                PRIMARY KEY (folder_path, image_id),
+                FOREIGN KEY (folder_path) REFERENCES folder_nodes(path),
+                FOREIGN KEY (image_id) REFERENCES images(id)
+            )",
+            rusqlite::params![],
+        )?;
+        self.execute(
+            "CREATE INDEX IF NOT EXISTS idx_folder_images_direct_image ON folder_images_direct(image_id)",
+            rusqlite::params![],
+        )?;
+
+        self.execute(
+            "CREATE TABLE IF NOT EXISTS random_history_global (
+                order_index INTEGER PRIMARY KEY,
+                image_id INTEGER NOT NULL,
+                FOREIGN KEY (image_id) REFERENCES images(id)
+            )",
+            rusqlite::params![],
+        )?;
+
+        self.execute(
+            "CREATE TABLE IF NOT EXISTS current_lap_global (
+                image_id INTEGER PRIMARY KEY,
+                FOREIGN KEY (image_id) REFERENCES images(id)
+            )",
+            rusqlite::params![],
+        )?;
+
+        self.execute(
+            "CREATE INDEX IF NOT EXISTS idx_images_path ON images(path)",
+            rusqlite::params![],
+        )?;
+        Ok(())
+    }
+
     fn ensure_state_column(&self, column_name: &str, column_def: &str) -> Result<()> {
         let column_exists: Result<i64> = self.query_row(
             "SELECT COUNT(*) FROM pragma_table_info('state') WHERE name = ?1",
@@ -447,6 +676,24 @@ mod tests {
             )
             .expect("hidden random index lookup should work");
         assert_eq!(hidden_random_index, 1);
+
+        let folder_nodes_table: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'folder_nodes'",
+                [],
+                |row| row.get(0),
+            )
+            .expect("folder_nodes table lookup should work");
+        assert_eq!(folder_nodes_table, 1);
+
+        let active_images_table: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'active_images'",
+                [],
+                |row| row.get(0),
+            )
+            .expect("active_images table lookup should work");
+        assert_eq!(active_images_table, 1);
 
         let state_row: i64 = conn
             .query_row("SELECT COUNT(*) FROM state WHERE id = 1", [], |row| {

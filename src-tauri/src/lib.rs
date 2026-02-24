@@ -79,6 +79,9 @@ pub fn run() {
             commands::get_current_folder,
             commands::delete_folder,
             commands::cleanup_stale_folders,
+            commands::get_folder_tree,
+            commands::set_folder_checked,
+            commands::set_folder_exclusive,
         ])
         .run(tauri::generate_context!())
         .unwrap_or_else(|err| eprintln!("error while running tauri application: {}", err));
