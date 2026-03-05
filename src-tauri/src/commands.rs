@@ -4,7 +4,8 @@ use rodio::{
 };
 use crate::img_loader::ImageLoader;
 use serde::{Deserialize, Serialize};
-use std::sync::{Arc, OnceLock, RwLock};
+use std::cell::RefCell;
+use std::sync::{Arc, RwLock};
 use std::time::Duration;
 use tauri::{AppHandle, Emitter, State};
 
@@ -631,34 +632,43 @@ pub async fn cleanup_stale_folders(
     Ok(removed_paths)
 }
 
-static TIMER_AUDIO_STREAM: OnceLock<rodio::OutputStream> = OnceLock::new();
+thread_local! {
+    static TIMER_AUDIO_STREAM: RefCell<Option<rodio::OutputStream>> = const { RefCell::new(None) };
+}
 
-fn get_timer_audio_stream() -> Result<&'static rodio::OutputStream, String> {
-    if let Some(stream) = TIMER_AUDIO_STREAM.get() {
-        return Ok(stream);
-    }
+fn with_timer_audio_stream<R>(
+    f: impl FnOnce(&rodio::OutputStream) -> Result<R, String>,
+) -> Result<R, String> {
+    TIMER_AUDIO_STREAM.with(|stream_cell| {
+        if stream_cell.borrow().is_none() {
+            let stream = OutputStreamBuilder::open_default_stream()
+                .map_err(|err| format!("failed to start audio device: {err}"))?;
+            *stream_cell.borrow_mut() = Some(stream);
+        }
 
-    let stream = OutputStreamBuilder::open_default_stream()
-        .map_err(|err| format!("failed to start audio device: {err}"))?;
-    let _ = TIMER_AUDIO_STREAM.set(stream);
-    TIMER_AUDIO_STREAM
-        .get()
-        .ok_or_else(|| "failed to initialize audio stream".to_string())
+        let stream_borrow = stream_cell.borrow();
+        let stream = stream_borrow
+            .as_ref()
+            .ok_or_else(|| "failed to initialize audio stream".to_string())?;
+
+        f(stream)
+    })
 }
 
 fn play_native_timer_tone(frequency_hz: f32, gain: f32) -> Result<(), String> {
-    let stream = get_timer_audio_stream()?;
-    let sink = Sink::connect_new(stream.mixer());
+    with_timer_audio_stream(|stream| {
+        let sink = Sink::connect_new(stream.mixer());
 
-    let tone = SineWave::new(frequency_hz)
-        .take_duration(Duration::from_millis(140))
-        .fade_in(Duration::from_millis(8))
-        .fade_out(Duration::from_millis(18))
-        .amplify(gain);
+        let tone = SineWave::new(frequency_hz)
+            .take_duration(Duration::from_millis(140))
+            .fade_in(Duration::from_millis(8))
+            .fade_out(Duration::from_millis(18))
+            .amplify(gain);
 
-    sink.append(tone);
-    sink.detach();
-    Ok(())
+        sink.append(tone);
+        sink.detach();
+        Ok(())
+    })
 }
 
 #[tauri::command]
