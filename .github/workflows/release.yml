@@ -122,18 +122,22 @@ jobs:
           args: --bundles ${{ matrix.bundles }}
 
   publish-aur:
-    if: needs.resolve-version.outputs.publish == 'true' && secrets.AUR_SSH_PRIVATE_KEY != ''
+    if: needs.resolve-version.outputs.publish == 'true'
     needs:
       - resolve-version
       - publish-tauri
     runs-on: ubuntu-latest
     permissions:
       contents: read
+    env:
+      HAS_AUR_KEY: ${{ secrets.AUR_SSH_PRIVATE_KEY != '' }}
     steps:
       - name: Checkout
+        if: env.HAS_AUR_KEY == 'true'
         uses: actions/checkout@v4
 
       - name: Download release deb and hash
+        if: env.HAS_AUR_KEY == 'true'
         id: deb
         shell: bash
         run: |
@@ -146,6 +150,7 @@ jobs:
           printf "sha256=%s\n" "$sha256" >> "$GITHUB_OUTPUT"
 
       - name: Setup AUR SSH
+        if: env.HAS_AUR_KEY == 'true'
         shell: bash
         run: |
           install -m 700 -d ~/.ssh
@@ -161,11 +166,13 @@ jobs:
           EOF
 
       - name: Clone AUR repo
+        if: env.HAS_AUR_KEY == 'true'
         shell: bash
         run: |
           git clone ssh://aur@aur.archlinux.org/random-pics-bin.git aur-repo
 
       - name: Update PKGBUILD and .SRCINFO
+        if: env.HAS_AUR_KEY == 'true'
         shell: bash
         run: |
           version="${{ needs.resolve-version.outputs.version }}"
@@ -222,6 +229,7 @@ jobs:
           EOF
 
       - name: Publish to AUR
+        if: env.HAS_AUR_KEY == 'true'
         shell: bash
         run: |
           cd aur-repo
@@ -235,23 +243,28 @@ jobs:
           git push
 
   publish-apt:
-    if: needs.resolve-version.outputs.publish == 'true' && secrets.APT_GPG_PRIVATE_KEY != ''
+    if: needs.resolve-version.outputs.publish == 'true'
     needs:
       - resolve-version
       - publish-tauri
     runs-on: ubuntu-latest
     permissions:
       contents: write
+    env:
+      HAS_APT_KEY: ${{ secrets.APT_GPG_PRIVATE_KEY != '' }}
     steps:
       - name: Checkout
+        if: env.HAS_APT_KEY == 'true'
         uses: actions/checkout@v4
 
       - name: Install apt repo tooling
+        if: env.HAS_APT_KEY == 'true'
         run: |
           sudo apt-get update
           sudo apt-get install -y dpkg-dev gnupg
 
       - name: Download release deb
+        if: env.HAS_APT_KEY == 'true'
         id: deb
         shell: bash
         run: |
@@ -271,6 +284,7 @@ jobs:
           printf "deb_name=%s\n" "$deb_name" >> "$GITHUB_OUTPUT"
 
       - name: Setup signing key
+        if: env.HAS_APT_KEY == 'true'
         id: signing
         shell: bash
         run: |
@@ -286,6 +300,7 @@ jobs:
           printf "GNUPGHOME=%s\n" "$GNUPGHOME" >> "$GITHUB_OUTPUT"
 
       - name: Checkout gh-pages branch
+        if: env.HAS_APT_KEY == 'true'
         shell: bash
         run: |
           if git ls-remote --exit-code --heads origin gh-pages >/dev/null 2>&1; then
@@ -299,6 +314,7 @@ jobs:
           fi
 
       - name: Build apt repository metadata
+        if: env.HAS_APT_KEY == 'true'
         shell: bash
         run: |
           version="${{ needs.resolve-version.outputs.version }}"
@@ -338,6 +354,7 @@ jobs:
           popd >/dev/null
 
       - name: Sign apt repository metadata
+        if: env.HAS_APT_KEY == 'true'
         shell: bash
         env:
           GNUPGHOME: ${{ steps.signing.outputs.GNUPGHOME }}
@@ -362,6 +379,7 @@ jobs:
           gpg --batch --yes --dearmor --output "$keyring_gpg" "$keyring_asc"
 
       - name: Publish apt repository to gh-pages
+        if: env.HAS_APT_KEY == 'true'
         shell: bash
         run: |
           cd gh-pages
