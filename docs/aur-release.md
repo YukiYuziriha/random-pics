@@ -34,6 +34,6 @@ cp packaging/aur/random-pics-bin/PKGBUILD random-pics-bin/
 cp packaging/aur/random-pics-bin/.SRCINFO random-pics-bin/
 cd random-pics-bin
 git add PKGBUILD .SRCINFO
-git commit -m "update to 1.1.0"
+git commit -m "update to 1.1.1"
 git push
 ```

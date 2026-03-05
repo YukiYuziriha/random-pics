@@ -40,8 +40,8 @@ yay -S random-pics-bin
 
 Arch direct from AppImage release asset:
 ```bash
-chmod +x ./random-pics_1.1.0_amd64.AppImage
-./random-pics_1.1.0_amd64.AppImage
+chmod +x ./random-pics_1.1.1_amd64.AppImage
+./random-pics_1.1.1_amd64.AppImage
 ```
 
 Run installed app:
