@@ -4,7 +4,7 @@ use rodio::{
 };
 use crate::img_loader::ImageLoader;
 use serde::{Deserialize, Serialize};
-use std::sync::{Arc, RwLock};
+use std::sync::{Arc, OnceLock, RwLock};
 use std::time::Duration;
 use tauri::{AppHandle, Emitter, State};
 
@@ -631,16 +631,33 @@ pub async fn cleanup_stale_folders(
     Ok(removed_paths)
 }
 
-fn play_native_timer_tone_blocking(frequency_hz: f32, gain: f32) -> Result<(), String> {
-    let stream_handle = OutputStreamBuilder::open_default_stream()
+static TIMER_AUDIO_STREAM: OnceLock<rodio::OutputStream> = OnceLock::new();
+
+fn get_timer_audio_stream() -> Result<&'static rodio::OutputStream, String> {
+    if let Some(stream) = TIMER_AUDIO_STREAM.get() {
+        return Ok(stream);
+    }
+
+    let stream = OutputStreamBuilder::open_default_stream()
         .map_err(|err| format!("failed to start audio device: {err}"))?;
-    let sink = Sink::connect_new(stream_handle.mixer());
+    let _ = TIMER_AUDIO_STREAM.set(stream);
+    TIMER_AUDIO_STREAM
+        .get()
+        .ok_or_else(|| "failed to initialize audio stream".to_string())
+}
+
+fn play_native_timer_tone(frequency_hz: f32, gain: f32) -> Result<(), String> {
+    let stream = get_timer_audio_stream()?;
+    let sink = Sink::connect_new(stream.mixer());
 
     let tone = SineWave::new(frequency_hz)
         .take_duration(Duration::from_millis(140))
+        .fade_in(Duration::from_millis(8))
+        .fade_out(Duration::from_millis(18))
         .amplify(gain);
+
     sink.append(tone);
-    sink.sleep_until_end();
+    sink.detach();
     Ok(())
 }
 
@@ -661,11 +678,9 @@ pub async fn play_timer_tone(
     let master_gain = (clamped_step as f32 / 10.0) * 0.25;
     let gain = (master_gain * tone_gain_multiplier).clamp(0.01, 0.98);
 
-    std::thread::spawn(move || {
-        if let Err(err) = play_native_timer_tone_blocking(frequency_hz, gain) {
-            eprintln!("[RUST] Timer tone playback failed: {err}");
-        }
-    });
+    if let Err(err) = play_native_timer_tone(frequency_hz, gain) {
+        eprintln!("[RUST] Timer tone playback failed: {err}");
+    }
 
     Ok(())
 }
