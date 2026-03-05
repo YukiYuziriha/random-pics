@@ -152,9 +152,21 @@ jobs:
       - name: Setup AUR SSH
         if: env.HAS_AUR_KEY == 'true'
         shell: bash
+        env:
+          AUR_SSH_PRIVATE_KEY: ${{ secrets.AUR_SSH_PRIVATE_KEY }}
         run: |
           install -m 700 -d ~/.ssh
-          printf "%s\n" "${{ secrets.AUR_SSH_PRIVATE_KEY }}" > ~/.ssh/aur
+          python - <<'PY'
+          from pathlib import Path
+          import os
+
+          raw_key = os.environ["AUR_SSH_PRIVATE_KEY"]
+          normalized = raw_key.replace("\\r\\n", "\n")
+          if "\\n" in normalized and "\n" not in normalized.strip():
+            normalized = normalized.replace("\\n", "\n")
+          normalized = normalized.strip() + "\n"
+          Path.home().joinpath(".ssh", "aur").write_text(normalized)
+          PY
           chmod 600 ~/.ssh/aur
           cat > ~/.ssh/config <<'EOF'
           Host aur.archlinux.org
