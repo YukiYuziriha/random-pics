@@ -200,23 +200,23 @@ jobs:
 
           cat > aur-repo/.SRCINFO <<EOF
           pkgbase = random-pics-bin
-	pkgdesc = Fast desktop local image viewer for gesture drawing practice
-	pkgver = ${version}
-	pkgrel = 1
-	url = https://github.com/YukiYuziriha/random-pics
-	arch = x86_64
-	license = MIT
-	depends = glibc
-	depends = gtk3
-	depends = webkit2gtk-4.1
-	depends = gstreamer
-	depends = gst-plugins-base
-	depends = gst-plugins-good
-	depends = gst-plugin-pipewire
-	provides = random-pics
-	conflicts = random-pics
-	source = ${deb_url}
-	sha256sums = ${sha256}
+          pkgdesc = Fast desktop local image viewer for gesture drawing practice
+          pkgver = ${version}
+          pkgrel = 1
+          url = https://github.com/YukiYuziriha/random-pics
+          arch = x86_64
+          license = MIT
+          depends = glibc
+          depends = gtk3
+          depends = webkit2gtk-4.1
+          depends = gstreamer
+          depends = gst-plugins-base
+          depends = gst-plugins-good
+          depends = gst-plugin-pipewire
+          provides = random-pics
+          conflicts = random-pics
+          source = ${deb_url}
+          sha256sums = ${sha256}
 
           pkgname = random-pics-bin
           EOF
