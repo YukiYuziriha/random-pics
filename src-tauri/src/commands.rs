@@ -675,7 +675,7 @@ pub async fn play_timer_tone(
     };
 
     let clamped_step = volume_step.or(volumeStep).unwrap_or(10).clamp(1, 10);
-    let master_gain = (clamped_step as f32 / 10.0) * 0.25;
+    let master_gain = (clamped_step as f32 / 10.0) * 0.82;
     let gain = (master_gain * tone_gain_multiplier).clamp(0.01, 0.98);
 
     if let Err(err) = play_native_timer_tone(frequency_hz, gain) {
