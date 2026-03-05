@@ -47,7 +47,9 @@ pub fn run() {
                 )?;
             }
             app.handle().plugin(tauri_plugin_dialog::init())?;
-            app.global_shortcut().register(f11.clone())?;
+            if let Err(err) = app.global_shortcut().register(f11.clone()) {
+                eprintln!("[RUST] Global F11 shortcut unavailable: {}", err);
+            }
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -82,6 +84,7 @@ pub fn run() {
             commands::get_folder_tree,
             commands::set_folder_checked,
             commands::set_folder_exclusive,
+            commands::play_timer_tone,
         ])
         .run(tauri::generate_context!())
         .unwrap_or_else(|err| eprintln!("error while running tauri application: {}", err));

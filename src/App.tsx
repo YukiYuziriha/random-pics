@@ -34,6 +34,7 @@ import {
   hideNormalHistoryImage,
   hideRandomHistoryImage,
   cleanupStaleFolders,
+  playNativeTimerTone,
   type FolderHistoryItem,
   type ImageHistoryItem,
   type ImageHistory,
@@ -228,8 +229,7 @@ export default function App() {
   const timerHoldCaptureActiveRef = useRef(false);
   const timerHoldCaptureKeyRef = useRef<'z' | '/' | null>(null);
   const timerHoldCaptureBufferRef = useRef('');
-  const timerAudioContextRef = useRef<AudioContext | null>(null);
-  const timerAudioErrorShownRef = useRef(false);
+  const timerSoundErrorShownRef = useRef(false);
   const timerVolumeSliderTrackRef = useRef<HTMLDivElement | null>(null);
   const expandedFolderPathsRef = useRef<Set<string>>(readExpandedFolderPaths());
 
@@ -289,81 +289,19 @@ export default function App() {
     return tag === 'textarea' || target.hasAttribute('contenteditable');
   };
 
-  const ensureTimerAudioContext = async (): Promise<AudioContext | null> => {
-    if (!globalThis.AudioContext) {
-      if (!timerAudioErrorShownRef.current) {
-        timerAudioErrorShownRef.current = true;
-        showToast('AudioContext unavailable in this environment');
-      }
-      return null;
-    }
-
-    if (!timerAudioContextRef.current) {
-      timerAudioContextRef.current = new globalThis.AudioContext();
-    }
-
-    const ctx = timerAudioContextRef.current;
-    if (ctx.state === 'suspended') {
-      try {
-        await ctx.resume();
-      } catch (err) {
-        if (!timerAudioErrorShownRef.current) {
-          timerAudioErrorShownRef.current = true;
-          showToast(`Audio resume failed: ${formatError(err)}`);
-        }
-        return null;
-      }
-    }
-
-    return ctx;
-  };
-
   const playTimerTone = async (tone: 'low' | 'mid' | 'high', volumeStepOverride?: number) => {
-    const ctx = await ensureTimerAudioContext();
-    if (!ctx) return;
-
     const normalizeVolumeStep = (step: number): number => Math.min(10, Math.max(1, Math.floor(step)));
-    const volumeStepToMasterGain = (step: number): number => (normalizeVolumeStep(step) / 10) * 0.98;
-    const toneGainMultiplier = (toneKind: 'low' | 'mid' | 'high'): number => {
-      if (toneKind === 'low') return 1.2;
-      if (toneKind === 'high') return 1.08;
-      return 1;
-    };
-
-    const now = ctx.currentTime;
     const volumeStep = normalizeVolumeStep(volumeStepOverride ?? timerSoundVolumeStep);
-    const masterGain = volumeStepToMasterGain(volumeStep);
-    const gain = Math.min(0.98, masterGain * toneGainMultiplier(tone));
-    const settings = tone === 'low'
-      ? { freq: 440, duration: 0.14, gain }
-      : tone === 'mid'
-        ? { freq: 660, duration: 0.14, gain }
-        : { freq: 880, duration: 0.14, gain };
 
-    const gainNode = ctx.createGain();
-    gainNode.gain.setValueAtTime(0.0001, now);
-    gainNode.gain.exponentialRampToValueAtTime(settings.gain, now + 0.006);
-    gainNode.gain.exponentialRampToValueAtTime(0.0001, now + settings.duration);
-    gainNode.connect(ctx.destination);
-
-    const oscSquare = ctx.createOscillator();
-    oscSquare.type = 'square';
-    oscSquare.frequency.setValueAtTime(settings.freq, now);
-    oscSquare.frequency.linearRampToValueAtTime(settings.freq * 0.98, now + settings.duration);
-    oscSquare.connect(gainNode);
-
-    const oscSine = ctx.createOscillator();
-    oscSine.type = 'sine';
-    oscSine.frequency.setValueAtTime(settings.freq * 2, now);
-    const sineGain = ctx.createGain();
-    sineGain.gain.setValueAtTime(0.08, now);
-    oscSine.connect(sineGain);
-    sineGain.connect(gainNode);
-
-    oscSquare.start(now);
-    oscSine.start(now);
-    oscSquare.stop(now + settings.duration + 0.03);
-    oscSine.stop(now + settings.duration + 0.03);
+    try {
+      await playNativeTimerTone(tone, volumeStep);
+    } catch (err) {
+      setIsTimerSoundEnabled(false);
+      if (!timerSoundErrorShownRef.current) {
+        timerSoundErrorShownRef.current = true;
+        showToast(`Timer sound unavailable: ${formatError(err)}`);
+      }
+    }
   };
 
   const playTimerToneBurst = (tone: 'low' | 'mid' | 'high', count: number, spacingMs = 55) => {
@@ -662,15 +600,6 @@ export default function App() {
   useEffect(() => {
     globalThis.localStorage?.setItem(TIMER_SOUND_VOLUME_STEP_STORAGE_KEY, String(timerSoundVolumeStep));
   }, [timerSoundVolumeStep]);
-
-  useEffect(() => {
-    return () => {
-      const ctx = timerAudioContextRef.current;
-      if (!ctx) return;
-      void ctx.close();
-      timerAudioContextRef.current = null;
-    };
-  }, []);
 
   useEffect(() => {
     if (!isTimerRunning) {
@@ -1445,9 +1374,6 @@ export default function App() {
     }
 
     const startAt = sanitizeSeconds(initialTimerSeconds);
-    if (isTimerSoundEnabled) {
-      await ensureTimerAudioContext();
-    }
     await startTimerLoop(startAt, true, true);
   };
 
@@ -1460,22 +1386,11 @@ export default function App() {
     }
 
     const restartAt = sanitizeSeconds(remainingTimerSeconds);
-    void (async () => {
-      if (isTimerSoundEnabled) {
-        await ensureTimerAudioContext();
-      }
-      await startTimerLoop(restartAt, false, false);
-    })();
+    void startTimerLoop(restartAt, false, false);
   };
 
   const handleToggleTimerSound = () => {
-    setIsTimerSoundEnabled((prev) => {
-      const next = !prev;
-      if (next) {
-        void ensureTimerAudioContext();
-      }
-      return next;
-    });
+    setIsTimerSoundEnabled((prev) => !prev);
   };
 
   const handleTimerSoundVolumeStepChange = (nextStep: number, playPreview: boolean) => {
@@ -1490,9 +1405,6 @@ export default function App() {
         void playTimerTone('mid', bounded);
       }
       return;
-    }
-    if (isTimerSoundEnabled) {
-      void ensureTimerAudioContext();
     }
   };
 

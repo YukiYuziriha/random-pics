@@ -54,14 +54,26 @@ Requirements:
 - Bun
 - Rust toolchain (for Tauri)
 
+Fresh machine setup (Arch/EndeavourOS):
+```bash
+sudo pacman -S --needed rustup
+rustup default stable
+```
+
+Project setup:
+```bash
+bun install
+bun add -d @tauri-apps/cli
+```
+
 Command (safe on fresh shells):
 ```bash
-source "$HOME/.cargo/env" && bunx tauri dev
+source "$HOME/.cargo/env" && bunx -p @tauri-apps/cli tauri dev
 ```
 
 If Rust is already on PATH:
 ```bash
-bunx tauri dev
+bunx -p @tauri-apps/cli tauri dev
 ```
 
 What this does:

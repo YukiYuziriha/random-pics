@@ -5,7 +5,15 @@ pkgdesc="Fast desktop local image viewer for gesture drawing practice"
 arch=('x86_64')
 url="https://github.com/YukiYuziriha/random-pics"
 license=('MIT')
-depends=('glibc' 'gtk3' 'webkit2gtk-4.1')
+depends=(
+  'glibc'
+  'gtk3'
+  'webkit2gtk-4.1'
+  'gstreamer'
+  'gst-plugins-base'
+  'gst-plugins-good'
+  'gst-plugin-pipewire'
+)
 provides=('random-pics')
 conflicts=('random-pics')
 _deb="random-pics_${pkgver}_amd64.deb"

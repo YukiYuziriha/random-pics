@@ -1,6 +1,11 @@
+use rodio::{
+    source::{SineWave, Source},
+    OutputStreamBuilder, Sink,
+};
 use crate::img_loader::ImageLoader;
 use serde::{Deserialize, Serialize};
 use std::sync::{Arc, RwLock};
+use std::time::Duration;
 use tauri::{AppHandle, Emitter, State};
 
 pub type ImageLoaderState = Arc<RwLock<Option<Arc<ImageLoader>>>>;
@@ -624,6 +629,45 @@ pub async fn cleanup_stale_folders(
     }
 
     Ok(removed_paths)
+}
+
+fn play_native_timer_tone_blocking(frequency_hz: f32, gain: f32) -> Result<(), String> {
+    let stream_handle = OutputStreamBuilder::open_default_stream()
+        .map_err(|err| format!("failed to start audio device: {err}"))?;
+    let sink = Sink::connect_new(stream_handle.mixer());
+
+    let tone = SineWave::new(frequency_hz)
+        .take_duration(Duration::from_millis(140))
+        .amplify(gain);
+    sink.append(tone);
+    sink.sleep_until_end();
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn play_timer_tone(
+    tone: String,
+    #[allow(non_snake_case)] volumeStep: Option<u8>,
+    volume_step: Option<u8>,
+) -> Result<(), CommandError> {
+    let (frequency_hz, tone_gain_multiplier) = match tone.as_str() {
+        "low" => (440.0, 1.2_f32),
+        "mid" => (660.0, 1.0_f32),
+        "high" => (880.0, 1.08_f32),
+        _ => return Err(CommandError::invalid("invalid timer tone")),
+    };
+
+    let clamped_step = volume_step.or(volumeStep).unwrap_or(10).clamp(1, 10);
+    let master_gain = (clamped_step as f32 / 10.0) * 0.25;
+    let gain = (master_gain * tone_gain_multiplier).clamp(0.01, 0.98);
+
+    std::thread::spawn(move || {
+        if let Err(err) = play_native_timer_tone_blocking(frequency_hz, gain) {
+            eprintln!("[RUST] Timer tone playback failed: {err}");
+        }
+    });
+
+    Ok(())
 }
 
 #[cfg(test)]

@@ -195,3 +195,9 @@ export async function hideRandomHistoryImage(imageId: number): Promise<void> {
 export async function cleanupStaleFolders(): Promise<string[]> {
   return await invoke('cleanup_stale_folders');
 }
+
+export type TimerTone = 'low' | 'mid' | 'high';
+
+export async function playNativeTimerTone(tone: TimerTone, volumeStep: number): Promise<void> {
+  await invoke('play_timer_tone', { tone, volumeStep });
+}
