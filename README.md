@@ -15,6 +15,7 @@ If you touch-type, the UI shortcuts should feel natural on first use.
 
 ## additional shortcuts
 - hold **z** or **/** key, enter number of seconds, release key to update start/stop timer value
+- double-click on folder in app UI to serve images only from this folder
 
 ## install
 
